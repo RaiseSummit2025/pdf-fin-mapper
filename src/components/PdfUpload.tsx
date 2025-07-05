@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,6 +43,218 @@ interface SortableItemProps {
   onRemove: (id: string) => void;
 }
 
+// IFRS Category Mapping Dictionary - maps account descriptions to predefined IFRS categories
+const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelCategory: FinancialEntry['highLevelCategory']; mainGrouping: string }> = {
+  // Assets - Non-current
+  'land': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'building': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'property': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'plant': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'machinery': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'equipment': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'vehicle': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'furniture': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'fixture': { ifrsCategory: 'Property, Plant and Equipment', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'lease asset': { ifrsCategory: 'Right-of-Use Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'right-of-use': { ifrsCategory: 'Right-of-Use Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'software': { ifrsCategory: 'Intangible Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'patent': { ifrsCategory: 'Intangible Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'trademark': { ifrsCategory: 'Intangible Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'license': { ifrsCategory: 'Intangible Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'goodwill': { ifrsCategory: 'Goodwill', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  'deferred tax asset': { ifrsCategory: 'Deferred Tax Assets', highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets' },
+  
+  // Assets - Current
+  'cash': { ifrsCategory: 'Cash and Cash Equivalents', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'bank': { ifrsCategory: 'Cash and Cash Equivalents', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'petty cash': { ifrsCategory: 'Cash and Cash Equivalents', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'deposit': { ifrsCategory: 'Cash and Cash Equivalents', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'accounts receivable': { ifrsCategory: 'Trade and Other Receivables', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'trade receivable': { ifrsCategory: 'Trade and Other Receivables', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'receivable': { ifrsCategory: 'Trade and Other Receivables', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'debtor': { ifrsCategory: 'Trade and Other Receivables', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'other receivable': { ifrsCategory: 'Trade and Other Receivables', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'prepayment': { ifrsCategory: 'Trade and Other Receivables', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'inventory': { ifrsCategory: 'Inventories', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'stock': { ifrsCategory: 'Inventories', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'raw material': { ifrsCategory: 'Inventories', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'work in progress': { ifrsCategory: 'Inventories', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  'finished goods': { ifrsCategory: 'Inventories', highLevelCategory: 'Assets', mainGrouping: 'Current Assets' },
+  
+  // Equity
+  'share capital': { ifrsCategory: 'Share Capital', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'capital': { ifrsCategory: 'Share Capital', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'ordinary share': { ifrsCategory: 'Share Capital', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'share premium': { ifrsCategory: 'Share Premium', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'retained earnings': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'retained profit': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'accumulated profit': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'owner equity': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'profit for the year': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  
+  // Liabilities - Non-current
+  'long term loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  'term loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  'bank loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  'lease liability': { ifrsCategory: 'Lease Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  'provision': { ifrsCategory: 'Provisions', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  'deferred tax liability': { ifrsCategory: 'Deferred Tax Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  
+  // Liabilities - Current
+  'accounts payable': { ifrsCategory: 'Trade and Other Payables', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'trade payable': { ifrsCategory: 'Trade and Other Payables', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'payable': { ifrsCategory: 'Trade and Other Payables', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'creditor': { ifrsCategory: 'Trade and Other Payables', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'accrual': { ifrsCategory: 'Trade and Other Payables', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'accrued expense': { ifrsCategory: 'Trade and Other Payables', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'short term loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'overdraft': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'tax payable': { ifrsCategory: 'Tax Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  'income tax': { ifrsCategory: 'Tax Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
+  
+  // Revenue
+  'revenue': { ifrsCategory: 'Revenue', highLevelCategory: 'Revenue', mainGrouping: 'Revenue' },
+  'sales': { ifrsCategory: 'Revenue', highLevelCategory: 'Revenue', mainGrouping: 'Revenue' },
+  'income': { ifrsCategory: 'Revenue', highLevelCategory: 'Revenue', mainGrouping: 'Revenue' },
+  'service income': { ifrsCategory: 'Revenue', highLevelCategory: 'Revenue', mainGrouping: 'Revenue' },
+  'other income': { ifrsCategory: 'Other Operating Income', highLevelCategory: 'Revenue', mainGrouping: 'Revenue' },
+  'miscellaneous income': { ifrsCategory: 'Other Operating Income', highLevelCategory: 'Revenue', mainGrouping: 'Revenue' },
+  
+  // Expenses
+  'cost of sales': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
+  'cost of goods sold': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
+  'material': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
+  'direct labor': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
+  'manufacturing': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
+  'salary': { ifrsCategory: 'Employee Benefits', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'wage': { ifrsCategory: 'Employee Benefits', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'employee': { ifrsCategory: 'Employee Benefits', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'payroll': { ifrsCategory: 'Employee Benefits', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'rent': { ifrsCategory: 'General and Administrative Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'office': { ifrsCategory: 'General and Administrative Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'administrative': { ifrsCategory: 'General and Administrative Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'professional fee': { ifrsCategory: 'General and Administrative Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'legal': { ifrsCategory: 'General and Administrative Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'audit': { ifrsCategory: 'General and Administrative Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'marketing': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'advertising': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'sales commission': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'promotion': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'depreciation': { ifrsCategory: 'Depreciation and Amortisation', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'amortisation': { ifrsCategory: 'Depreciation and Amortisation', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'interest expense': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
+  'finance cost': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
+  'tax expense': { ifrsCategory: 'Income Tax Expense', highLevelCategory: 'Expenses', mainGrouping: 'Tax' },
+};
+
+// Fuzzy matching function to map account descriptions to IFRS categories
+const mapDescriptionToIFRS = (description: string): { ifrsCategory: string; highLevelCategory: FinancialEntry['highLevelCategory']; mainGrouping: string } => {
+  const lowerDesc = description.toLowerCase();
+  
+  // Try exact matches first
+  for (const [keyword, mapping] of Object.entries(IFRS_MAPPING_DICTIONARY)) {
+    if (lowerDesc.includes(keyword)) {
+      return mapping;
+    }
+  }
+  
+  // Fallback to uncategorized
+  return {
+    ifrsCategory: 'Uncategorized',
+    highLevelCategory: 'Assets',
+    mainGrouping: 'Current Assets'
+  };
+};
+
+// Simulate realistic PDF parsing with proper IFRS mapping
+const parseFinancialData = (fileName: string): FinancialData => {
+  const companyName = fileName.replace('.pdf', '').replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' Corporation';
+  
+  // Simulate realistic trial balance or financial statement data
+  const rawAccountData = [
+    { accountNo: '1000', description: 'Cash at Bank', amount: 89000, type: 'debit' },
+    { accountNo: '1010', description: 'Petty Cash Fund', amount: 2500, type: 'debit' },
+    { accountNo: '1020', description: 'Short-term Bank Deposits', amount: 65000, type: 'debit' },
+    { accountNo: '1100', description: 'Accounts Receivable - Trade', amount: 145000, type: 'debit' },
+    { accountNo: '1110', description: 'Other Receivables and Prepayments', amount: 23000, type: 'debit' },
+    { accountNo: '1200', description: 'Inventory - Raw Materials', amount: 78000, type: 'debit' },
+    { accountNo: '1210', description: 'Inventory - Work in Progress', amount: 45000, type: 'debit' },
+    { accountNo: '1220', description: 'Inventory - Finished Goods', amount: 67000, type: 'debit' },
+    { accountNo: '1500', description: 'Land and Buildings at Cost', amount: 580000, type: 'debit' },
+    { accountNo: '1510', description: 'Plant and Machinery - Net', amount: 420000, type: 'debit' },
+    { accountNo: '1520', description: 'Motor Vehicles at NBV', amount: 85000, type: 'debit' },
+    { accountNo: '1530', description: 'Office Equipment and Fixtures', amount: 45000, type: 'debit' },
+    { accountNo: '1600', description: 'Right-of-Use Assets - Property Leases', amount: 125000, type: 'debit' },
+    { accountNo: '1700', description: 'Computer Software and Licenses', amount: 78000, type: 'debit' },
+    { accountNo: '1710', description: 'Patents and Trademarks', amount: 125000, type: 'debit' },
+    { accountNo: '1800', description: 'Goodwill on Business Combinations', amount: 95000, type: 'debit' },
+    { accountNo: '1900', description: 'Deferred Tax Asset', amount: 32000, type: 'debit' },
+    
+    // Liabilities
+    { accountNo: '2000', description: 'Accounts Payable - Trade', amount: 89000, type: 'credit' },
+    { accountNo: '2010', description: 'Accrued Expenses and Other Payables', amount: 34000, type: 'credit' },
+    { accountNo: '2100', description: 'Short-term Bank Loans', amount: 45000, type: 'credit' },
+    { accountNo: '2110', description: 'Tax Payable - Current', amount: 28000, type: 'credit' },
+    { accountNo: '2120', description: 'Lease Liability - Current Portion', amount: 15000, type: 'credit' },
+    { accountNo: '2500', description: 'Bank Loan - Term (Secured)', amount: 235000, type: 'credit' },
+    { accountNo: '2510', description: 'Lease Liability - Property', amount: 98000, type: 'credit' },
+    { accountNo: '2520', description: 'Provision for Employee Benefits', amount: 35000, type: 'credit' },
+    { accountNo: '2600', description: 'Deferred Tax Liability', amount: 28000, type: 'credit' },
+    
+    // Equity
+    { accountNo: '3000', description: 'Ordinary Share Capital', amount: 200000, type: 'credit' },
+    { accountNo: '3100', description: 'Share Premium Account', amount: 150000, type: 'credit' },
+    { accountNo: '3200', description: 'Retained Earnings - Prior Years', amount: 285000, type: 'credit' },
+    { accountNo: '3210', description: 'Profit for the Current Year', amount: 145000, type: 'credit' },
+    
+    // Revenue
+    { accountNo: '4000', description: 'Revenue from Sales - Domestic', amount: 980000, type: 'credit' },
+    { accountNo: '4010', description: 'Revenue from Sales - Export', amount: 420000, type: 'credit' },
+    { accountNo: '4100', description: 'Other Operating Income', amount: 25000, type: 'credit' },
+    
+    // Expenses
+    { accountNo: '5000', description: 'Cost of Raw Materials Consumed', amount: 485000, type: 'debit' },
+    { accountNo: '5010', description: 'Direct Labor Costs', amount: 225000, type: 'debit' },
+    { accountNo: '5020', description: 'Manufacturing Overhead Costs', amount: 145000, type: 'debit' },
+    { accountNo: '6000', description: 'Salary and Wages - Operations', amount: 185000, type: 'debit' },
+    { accountNo: '6010', description: 'Executive Salaries and Benefits', amount: 120000, type: 'debit' },
+    { accountNo: '6100', description: 'Office Rent and Rates', amount: 48000, type: 'debit' },
+    { accountNo: '6110', description: 'Professional Fees - Legal and Audit', amount: 35000, type: 'debit' },
+    { accountNo: '6200', description: 'Marketing and Advertising Expenses', amount: 75000, type: 'debit' },
+    { accountNo: '6210', description: 'Sales Commission and Incentives', amount: 42000, type: 'debit' },
+    { accountNo: '6300', description: 'Depreciation Expense - PPE', amount: 65000, type: 'debit' },
+    { accountNo: '6400', description: 'Interest Expense on Bank Loans', amount: 18000, type: 'debit' },
+    { accountNo: '6500', description: 'Income Tax Expense', amount: 45000, type: 'debit' },
+  ];
+
+  const entries: FinancialEntry[] = rawAccountData.map((account, index) => {
+    const mapping = mapDescriptionToIFRS(account.description);
+    const finalAmount = account.type === 'credit' ? account.amount : account.amount;
+    
+    console.log(`Mapping "${account.description}" to IFRS category: ${mapping.ifrsCategory}`);
+    
+    return {
+      id: `${account.accountNo}_${index}`,
+      date: '2023-12-31',
+      description: account.description,
+      amount: finalAmount,
+      highLevelCategory: mapping.highLevelCategory,
+      mainGrouping: mapping.mainGrouping,
+      ifrsCategory: mapping.ifrsCategory,
+      originalLine: `${account.accountNo} | ${account.description} | ${account.type === 'debit' ? account.amount : 0} | ${account.type === 'credit' ? account.amount : 0}`
+    };
+  });
+
+  console.log('Generated financial entries with IFRS mapping:', entries);
+  
+  return {
+    companyName,
+    reportPeriod: 'Year Ended 31 December 2023',
+    entries,
+    lastUpdated: new Date().toISOString()
+  };
+};
+
 const SortableItem = ({ id, entry, onRemove }: SortableItemProps) => {
   const {
     attributes,
@@ -79,7 +290,7 @@ const SortableItem = ({ id, entry, onRemove }: SortableItemProps) => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              #{entry.id}
+              #{entry.id.split('_')[0]}
             </span>
             <span className="text-xs text-gray-400">{entry.date}</span>
           </div>
@@ -105,6 +316,7 @@ export function PdfUpload() {
   const [showMappingEngine, setShowMappingEngine] = useState(false);
   const [mappedData, setMappedData] = useState<FinancialData | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [unmappedEntries, setUnmappedEntries] = useState<string[]>([]);
   const { toast } = useToast();
   const { setFinancialData, setIsProcessedData } = useFinancialData();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -145,78 +357,6 @@ export function PdfUpload() {
 
   const [steps, setSteps] = useState<ProcessingStep[]>(processingSteps);
 
-  const generateEnhancedRealisticData = (fileName: string): FinancialData => {
-    const companyName = fileName.replace('.pdf', '').replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' Corporation';
-    
-    const entries: FinancialEntry[] = [
-      // Non-Current Assets - More realistic entries
-      { id: '1001', date: '2023-12-31', description: 'Land and Buildings', amount: 580000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Property, Plant and Equipment', originalLine: 'Land & buildings at cost less depreciation' },
-      { id: '1002', date: '2023-12-31', description: 'Plant and Machinery', amount: 420000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Property, Plant and Equipment', originalLine: 'Plant & machinery - net book value' },
-      { id: '1003', date: '2023-12-31', description: 'Motor Vehicles', amount: 85000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Property, Plant and Equipment', originalLine: 'Motor vehicles at NBV' },
-      { id: '1004', date: '2023-12-31', description: 'Office Equipment', amount: 45000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Property, Plant and Equipment', originalLine: 'Office equipment and fixtures' },
-      { id: '1005', date: '2023-12-31', description: 'Lease Assets - Buildings', amount: 125000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Right-of-Use Assets', originalLine: 'Right-of-use assets - property leases' },
-      { id: '1006', date: '2023-12-31', description: 'Software Licenses', amount: 78000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Intangible Assets', originalLine: 'Computer software and licenses' },
-      { id: '1007', date: '2023-12-31', description: 'Patents and Trademarks', amount: 125000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Intangible Assets', originalLine: 'Intellectual property rights' },
-      { id: '1008', date: '2023-12-31', description: 'Goodwill on Acquisition', amount: 95000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Goodwill', originalLine: 'Goodwill arising on business combinations' },
-      { id: '1009', date: '2023-12-31', description: 'Deferred Tax Assets', amount: 32000, highLevelCategory: 'Assets', mainGrouping: 'Non-current Assets', ifrsCategory: 'Deferred Tax Assets', originalLine: 'Deferred tax asset - timing differences' },
-      
-      // Current Assets - Enhanced entries
-      { id: '2001', date: '2023-12-31', description: 'Cash at Bank', amount: 89000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Cash and Cash Equivalents', originalLine: 'Current account - Bank of Commerce' },
-      { id: '2002', date: '2023-12-31', description: 'Short-term Deposits', amount: 65000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Cash and Cash Equivalents', originalLine: 'Term deposits - 90 days' },
-      { id: '2003', date: '2023-12-31', description: 'Petty Cash', amount: 2500, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Cash and Cash Equivalents', originalLine: 'Cash on hand - petty cash fund' },
-      { id: '2004', date: '2023-12-31', description: 'Trade Debtors', amount: 145000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Trade and Other Receivables', originalLine: 'Trade receivables - customers' },
-      { id: '2005', date: '2023-12-31', description: 'Other Receivables', amount: 23000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Trade and Other Receivables', originalLine: 'Sundry debtors and prepayments' },
-      { id: '2006', date: '2023-12-31', description: 'Raw Materials', amount: 78000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Inventories', originalLine: 'Raw materials and components' },
-      { id: '2007', date: '2023-12-31', description: 'Work in Progress', amount: 45000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Inventories', originalLine: 'Work-in-progress at lower of cost/NRV' },
-      { id: '2008', date: '2023-12-31', description: 'Finished Goods', amount: 67000, highLevelCategory: 'Assets', mainGrouping: 'Current Assets', ifrsCategory: 'Inventories', originalLine: 'Finished goods inventory' },
-      
-      // Equity - Enhanced entries
-      { id: '3001', date: '2023-12-31', description: 'Ordinary Share Capital', amount: 200000, highLevelCategory: 'Equity', mainGrouping: 'Equity', ifrsCategory: 'Share Capital', originalLine: '200,000 ordinary shares of $1 each' },
-      { id: '3002', date: '2023-12-31', description: 'Share Premium Account', amount: 150000, highLevelCategory: 'Equity', mainGrouping: 'Equity', ifrsCategory: 'Share Premium', originalLine: 'Share premium on issue of shares' },
-      { id: '3003', date: '2023-12-31', description: 'Retained Profits', amount: 285000, highLevelCategory: 'Equity', mainGrouping: 'Equity', ifrsCategory: 'Retained Earnings', originalLine: 'Accumulated profits brought forward' },
-      { id: '3004', date: '2023-12-31', description: 'Current Year Earnings', amount: 145000, highLevelCategory: 'Equity', mainGrouping: 'Equity', ifrsCategory: 'Retained Earnings', originalLine: 'Profit for the current year' },
-      
-      // Non-Current Liabilities - Enhanced entries  
-      { id: '4001', date: '2023-12-31', description: 'Bank Loan - Term', amount: 235000, highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities', ifrsCategory: 'Borrowings', originalLine: 'Term loan - secured on property' },
-      { id: '4002', date: '2023-12-31', description: 'Lease Liability - Property', amount: 98000, highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities', ifrsCategory: 'Lease Liabilities', originalLine: 'Lease obligations - property leases' },
-      { id: '4003', date: '2023-12-31', description: 'Deferred Tax Liability', amount: 28000, highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities', ifrsCategory: 'Deferred Tax Liabilities', originalLine: 'Deferred tax - accelerated depreciation' },
-      { id: '4004', date: '2023-12-31', description: 'Long-term Provisions', amount: 35000, highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities', ifrsCategory: 'Provisions', originalLine: 'Provision for employee benefits' },
-      
-      // Current Liabilities - Enhanced entries
-      { id: '5001', date: '2023-12-31', description: 'Trade Creditors', amount: 89000, highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities', ifrsCategory: 'Trade and Other Payables', originalLine: 'Trade payables - suppliers' },
-      { id: '5002', date: '2023-12-31', description: 'Accrued Expenses', amount: 34000, highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities', ifrsCategory: 'Trade and Other Payables', originalLine: 'Accruals and other payables' },
-      { id: '5003', date: '2023-12-31', description: 'Short-term Borrowings', amount: 45000, highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities', ifrsCategory: 'Borrowings', originalLine: 'Bank overdraft and short-term loans' },
-      { id: '5004', date: '2023-12-31', description: 'Tax Payable', amount: 28000, highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities', ifrsCategory: 'Tax Liabilities', originalLine: 'Current tax liability' },
-      { id: '5005', date: '2023-12-31', description: 'Lease Liability - Current', amount: 15000, highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities', ifrsCategory: 'Lease Liabilities', originalLine: 'Current portion of lease liabilities' },
-      
-      // Revenue - Enhanced entries
-      { id: '6001', date: '2023-12-31', description: 'Sales Revenue - Domestic', amount: 980000, highLevelCategory: 'Revenue', mainGrouping: 'Revenue', ifrsCategory: 'Revenue', originalLine: 'Revenue from contracts with customers - domestic' },
-      { id: '6002', date: '2023-12-31', description: 'Sales Revenue - Export', amount: 420000, highLevelCategory: 'Revenue', mainGrouping: 'Revenue', ifrsCategory: 'Revenue', originalLine: 'Revenue from contracts with customers - export' },
-      { id: '6003', date: '2023-12-31', description: 'Other Operating Income', amount: 25000, highLevelCategory: 'Revenue', mainGrouping: 'Revenue', ifrsCategory: 'Other Operating Income', originalLine: 'Miscellaneous operating income' },
-      
-      // Expenses - Enhanced entries
-      { id: '7001', date: '2023-12-31', description: 'Raw Materials Consumed', amount: 485000, highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales', ifrsCategory: 'Cost of Sales', originalLine: 'Cost of raw materials and components' },
-      { id: '7002', date: '2023-12-31', description: 'Direct Labor', amount: 225000, highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales', ifrsCategory: 'Cost of Sales', originalLine: 'Direct labor costs' },
-      { id: '7003', date: '2023-12-31', description: 'Manufacturing Overheads', amount: 145000, highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales', ifrsCategory: 'Cost of Sales', originalLine: 'Manufacturing overhead allocation' },
-      { id: '7004', date: '2023-12-31', description: 'Executive Salaries', amount: 120000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'Employee Benefits', originalLine: 'Directors and senior management remuneration' },
-      { id: '7005', date: '2023-12-31', description: 'Staff Wages', amount: 185000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'Employee Benefits', originalLine: 'Wages and salaries - operations' },
-      { id: '7006', date: '2023-12-31', description: 'Office Rent', amount: 48000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'General and Administrative Expenses', originalLine: 'Rent and rates - office premises' },
-      { id: '7007', date: '2023-12-31', description: 'Professional Fees', amount: 35000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'General and Administrative Expenses', originalLine: 'Legal and professional fees' },
-      { id: '7008', date: '2023-12-31', description: 'Marketing Expenses', amount: 75000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'Selling Expenses', originalLine: 'Advertising and marketing costs' },
-      { id: '7009', date: '2023-12-31', description: 'Sales Commission', amount: 42000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'Selling Expenses', originalLine: 'Sales commissions and incentives' },
-      { id: '7010', date: '2023-12-31', description: 'Depreciation Expense', amount: 65000, highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses', ifrsCategory: 'Depreciation and Amortisation', originalLine: 'Depreciation of property, plant & equipment' },
-      { id: '7011', date: '2023-12-31', description: 'Interest on Borrowings', amount: 18000, highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs', ifrsCategory: 'Finance Costs', originalLine: 'Interest expense on bank loans' },
-      { id: '7012', date: '2023-12-31', description: 'Income Tax Expense', amount: 45000, highLevelCategory: 'Expenses', mainGrouping: 'Tax', ifrsCategory: 'Income Tax Expense', originalLine: 'Current and deferred tax expense' }
-    ];
-
-    return {
-      companyName,
-      reportPeriod: 'Year Ended 31 December 2023',
-      entries,
-      lastUpdated: new Date().toISOString()
-    };
-  };
-
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && file.type === 'application/pdf') {
@@ -246,15 +386,25 @@ export function PdfUpload() {
         index === i ? { ...step, status: 'processing' } : step
       ));
       
-      // Simulate processing time with different delays for each step
       const delays = [800, 1200, 600, 400];
       await new Promise(resolve => setTimeout(resolve, delays[i] || 1000));
       
       if (i === steps.length - 1) {
-        generatedData = generateEnhancedRealisticData(uploadedFile?.name || 'Financial Report');
+        generatedData = parseFinancialData(uploadedFile?.name || 'Financial Report');
         setFinancialData(generatedData);
         setIsProcessedData(true);
-        console.log('Generated enhanced financial data:', generatedData);
+        
+        // Track unmapped entries
+        const unmapped = generatedData.entries
+          .filter(entry => entry.ifrsCategory === 'Uncategorized')
+          .map(entry => entry.description);
+        setUnmappedEntries(unmapped);
+        
+        if (unmapped.length > 0) {
+          console.log('Unmapped entries found:', unmapped);
+        }
+        
+        console.log('Generated financial data with IFRS mapping:', generatedData);
       }
       
       setSteps(prev => prev.map((step, index) => 
@@ -296,14 +446,12 @@ export function PdfUpload() {
 
     console.log('Drag ended:', { activeId, overId });
 
-    // Find the entry being dragged
     const draggedEntry = mappedData.entries.find(entry => entry.id === activeId);
     if (!draggedEntry) {
       console.log('Could not find dragged entry');
       return;
     }
 
-    // Parse the drop target to extract category information
     const [targetHighLevel, targetGrouping, targetCategory] = overId.split('::');
 
     if (!targetHighLevel || !targetGrouping || !targetCategory) {
@@ -311,7 +459,6 @@ export function PdfUpload() {
       return;
     }
 
-    // Update the entry with new categorization
     const updatedEntries = mappedData.entries.map(entry => 
       entry.id === activeId 
         ? { 
@@ -361,7 +508,6 @@ export function PdfUpload() {
     }
   };
 
-  // Enhanced IFRS Category Component with proper drop zones
   const IFRSCategory = ({ 
     title, 
     entries, 
@@ -420,11 +566,9 @@ export function PdfUpload() {
     );
   };
 
-  // Main Mapping Engine Component
   const MappingEngine = () => {
     if (!mappedData) return null;
 
-    // Filter entries by categories with enhanced grouping
     const nonCurrentAssets = mappedData.entries.filter(e => 
       e.highLevelCategory === 'Assets' && e.mainGrouping === 'Non-current Assets'
     );
@@ -441,7 +585,6 @@ export function PdfUpload() {
     const revenue = mappedData.entries.filter(e => e.highLevelCategory === 'Revenue');
     const expenses = mappedData.entries.filter(e => e.highLevelCategory === 'Expenses');
 
-    // Calculate totals for balance sheet verification
     const totalAssets = [...nonCurrentAssets, ...currentAssets].reduce((sum, e) => sum + e.amount, 0);
     const totalLiabilitiesEquity = [...nonCurrentLiabilities, ...currentLiabilities, ...equity].reduce((sum, e) => sum + e.amount, 0);
     const totalRevenue = revenue.reduce((sum, e) => sum + e.amount, 0);
@@ -459,6 +602,11 @@ export function PdfUpload() {
             <div>
               <h2 className="text-2xl font-bold text-gray-900">IFRS Mapping Engine</h2>
               <p className="text-gray-600">Drag and drop financial line items to reassign IFRS categories</p>
+              {unmappedEntries.length > 0 && (
+                <p className="text-orange-600 text-sm mt-1">
+                  ⚠️ {unmappedEntries.length} items need manual classification
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <Badge className="bg-blue-100 text-blue-800">
@@ -469,6 +617,24 @@ export function PdfUpload() {
               </Badge>
             </div>
           </div>
+
+          {unmappedEntries.length > 0 && (
+            <Card className="border-orange-200 bg-orange-50">
+              <CardHeader>
+                <CardTitle className="text-orange-800">Unmapped Entries Detected</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-orange-700 mb-2">
+                  The following {unmappedEntries.length} entries could not be automatically mapped and need manual classification:
+                </p>
+                <div className="text-xs text-orange-600 space-y-1">
+                  {unmappedEntries.map((desc, idx) => (
+                    <div key={idx}>• {desc}</div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Tabs defaultValue="balance-sheet" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
@@ -482,7 +648,6 @@ export function PdfUpload() {
 
             <TabsContent value="balance-sheet" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Assets Panel */}
                 <div className="space-y-6">
                   <div className="text-center p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
                     <h3 className="text-xl font-bold text-blue-900">Assets</h3>
@@ -550,7 +715,6 @@ export function PdfUpload() {
                   </div>
                 </div>
 
-                {/* Liabilities & Equity Panel */}
                 <div className="space-y-6">
                   <div className="text-center p-4 bg-red-50 rounded-lg border-2 border-red-200">
                     <h3 className="text-xl font-bold text-red-900">Liabilities & Equity</h3>
@@ -646,7 +810,6 @@ export function PdfUpload() {
 
             <TabsContent value="income-statement" className="space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Revenue Panel */}
                 <div className="space-y-6">
                   <div className="text-center p-4 bg-green-50 rounded-lg border-2 border-green-200">
                     <h3 className="text-xl font-bold text-green-900">Revenue & Income</h3>
@@ -668,7 +831,6 @@ export function PdfUpload() {
                   </div>
                 </div>
 
-                {/* Expenses Panel */}
                 <div className="space-y-6">
                   <div className="text-center p-4 bg-orange-50 rounded-lg border-2 border-orange-200">
                     <h3 className="text-xl font-bold text-orange-900">Expenses</h3>
