@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -250,7 +249,7 @@ export function PdfUpload() {
       
       await new Promise(resolve => setTimeout(resolve, 800));
       
-      if (i === steps.length - 1) {
+      if (i === 1) { // IFRS Mapping step
         // Try to parse actual PDF data
         const parsedData = parseActualPDFData(uploadedFile?.name || '');
         
@@ -258,18 +257,9 @@ export function PdfUpload() {
           setMappedData(parsedData);
           setFinancialData(parsedData);
           setIsProcessedData(true);
-          setShowMappingEngine(true);
         } else {
-          toast({
-            title: "No Data Found",
-            description: "Could not extract financial data from the uploaded PDF. Please ensure the file contains structured financial information.",
-            variant: "destructive"
-          });
-          setSteps(prev => prev.map((step, index) => 
-            index === i ? { ...step, status: 'error' } : step
-          ));
-          setIsProcessing(false);
-          return;
+          // Show error but continue processing
+          console.log('No structured data found in PDF, but continuing process');
         }
       }
       
@@ -278,6 +268,18 @@ export function PdfUpload() {
       ));
       
       setProgress(((i + 1) / steps.length) * 100);
+    }
+    
+    // Always show mapping engine after processing completes
+    if (mappedData || uploadedFile) {
+      setShowMappingEngine(true);
+      toast({
+        title: "Processing Complete",
+        description: mappedData ? 
+          `Successfully processed ${mappedData.entries.length} entries` : 
+          "Processing completed. No structured data found in the uploaded PDF.",
+        variant: mappedData ? "default" : "destructive"
+      });
     }
     
     setIsProcessing(false);
@@ -389,7 +391,38 @@ export function PdfUpload() {
   );
 
   const MappingEngine = () => {
-    if (!mappedData) return null;
+    if (!mappedData) {
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">IFRS Mapping Engine</h2>
+              <p className="text-gray-600">No structured data found in the uploaded PDF</p>
+            </div>
+          </div>
+          
+          <div className="text-center text-gray-500 py-12 border border-gray-200 rounded-lg">
+            <p className="text-lg mb-2">No Financial Data Available</p>
+            <p className="text-sm">The uploaded PDF does not contain recognizable financial data structure.</p>
+            <p className="text-sm mt-2">Please upload a PDF with structured financial statements or trial balance.</p>
+          </div>
+          
+          <div className="flex justify-center pt-6 border-t">
+            <Button 
+              onClick={() => {
+                setShowMappingEngine(false);
+                setUploadedFile(null);
+                setProgress(0);
+                setSteps(processingSteps.map(step => ({ ...step, status: 'pending' })));
+              }}
+              variant="outline"
+            >
+              Upload Another File
+            </Button>
+          </div>
+        </div>
+      );
+    }
 
     const nonCurrentAssets = mappedData.entries.filter(e => 
       e.highLevelCategory === 'Assets' && e.mainGrouping === 'Non-current Assets'
