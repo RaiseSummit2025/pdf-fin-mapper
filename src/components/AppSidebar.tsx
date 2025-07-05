@@ -1,4 +1,4 @@
-import { BarChart3, FileText, Settings, Upload, Database } from 'lucide-react';
+import { BarChart3, FileText, Settings, Upload, Database, Bot } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import {
   Sidebar,
@@ -36,6 +36,11 @@ const navigationItems = [
     title: 'Upload PDF',
     url: '/upload',
     icon: Upload,
+  },
+  {
+    title: 'AI Chatbot',
+    url: '/chat',
+    icon: Bot,
   },
 ];
 
