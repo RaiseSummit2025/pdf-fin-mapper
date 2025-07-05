@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Eye, FileSearch, MapPin } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Eye, FileSearch, MapPin, ArrowRight, Move } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FinancialEntry, FinancialData } from '@/types/financial';
@@ -37,6 +38,9 @@ export function PdfUpload() {
   const [processingLogs, setProcessingLogs] = useState<ProcessingLog[]>([]);
   const [extractedItems, setExtractedItems] = useState<ExtractedItem[]>([]);
   const [showTransparency, setShowTransparency] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showMappingEngine, setShowMappingEngine] = useState(false);
+  const [mappedData, setMappedData] = useState<FinancialData | null>(null);
   const { toast } = useToast();
   const { setFinancialData, setIsProcessedData } = useFinancialData();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -138,6 +142,8 @@ export function PdfUpload() {
     const file = event.target.files?.[0];
     if (file && file.type === 'application/pdf') {
       setUploadedFile(file);
+      setShowPreview(true);
+      setShowMappingEngine(false);
       setSteps(processingSteps.map(step => ({ ...step, status: 'pending' })));
       setProgress(0);
       setCurrentStep(0);
@@ -156,6 +162,7 @@ export function PdfUpload() {
   const simulateProcessing = async () => {
     setIsProcessing(true);
     setShowTransparency(true);
+    let generatedData: FinancialData | null = null;
     
     for (let i = 0; i < steps.length; i++) {
       setCurrentStep(i);
@@ -211,8 +218,8 @@ export function PdfUpload() {
         case 5: // Completion
           addLog('Finalizing data structure...');
           await new Promise(resolve => setTimeout(resolve, 800));
-          const newData = generateRealisticData(uploadedFile?.name || 'Financial Report');
-          setFinancialData(newData);
+          generatedData = generateRealisticData(uploadedFile?.name || 'Financial Report');
+          setFinancialData(generatedData);
           setIsProcessedData(true);
           addLog('Financial statements ready for analysis', 'success');
           break;
@@ -228,9 +235,14 @@ export function PdfUpload() {
     }
     
     setIsProcessing(false);
+    if (generatedData) {
+      setMappedData(generatedData);
+    }
+    setShowPreview(false);
+    setShowMappingEngine(true);
     toast({
       title: "Processing Complete",
-      description: "Financial data has been successfully extracted and mapped. You can now review the results in the Dashboard and Mapping sections."
+      description: "Financial data has been successfully extracted and mapped. Review the IFRS mappings below."
     });
   };
 
@@ -255,6 +267,211 @@ export function PdfUpload() {
     }
   };
 
+  // PDF Preview Component
+  const PdfPreview = () => (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Document Preview
+          {uploadedFile && (
+            <Badge variant="outline" className="ml-auto">
+              {uploadedFile.name}
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="border rounded-lg bg-muted/20 min-h-[400px] flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="bg-background border-2 border-dashed border-border rounded-lg p-8 max-w-md mx-auto">
+              <FileText className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <p className="font-medium">PDF Preview</p>
+              <p className="text-sm text-muted-foreground">
+                Simulated preview of {uploadedFile?.name}
+              </p>
+              <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+                <div>📄 Page 1: Balance Sheet</div>
+                <div>📊 Page 2: Income Statement</div>
+                <div>💰 Page 3: Cash Flow Statement</div>
+              </div>
+            </div>
+            {currentStep >= 1 && (
+              <div className="flex items-center gap-2 text-sm text-success">
+                <CheckCircle className="h-4 w-4" />
+                Financial tables detected and parsing in progress...
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // IFRS Mapping Engine Component
+  const MappingEngine = () => {
+    if (!mappedData) return null;
+
+    const formatCurrency = (amount: number) => 
+      new Intl.NumberFormat('en-US', { 
+        style: 'currency', 
+        currency: 'USD',
+        minimumFractionDigits: 0 
+      }).format(amount);
+
+    const CategoryPanel = ({ 
+      title, 
+      entries, 
+      bgColor = "bg-background" 
+    }: { 
+      title: string; 
+      entries: FinancialEntry[];
+      bgColor?: string;
+    }) => (
+      <Card className={`${bgColor} border-2`}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center justify-between">
+            {title}
+            <Badge variant="secondary" className="text-xs">
+              {entries.length} items
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {entries.map((entry) => (
+            <div 
+              key={entry.id} 
+              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{entry.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  {entry.ifrsCategory}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-medium">
+                  {formatCurrency(entry.amount)}
+                </span>
+                <Button 
+                  size="sm" 
+                  variant="ghost" 
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Move className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    );
+
+    const currentAssets = mappedData.entries.filter(e => 
+      e.highLevelCategory === 'Assets' && e.mainGrouping === 'Current Assets'
+    );
+    const nonCurrentAssets = mappedData.entries.filter(e => 
+      e.highLevelCategory === 'Assets' && e.mainGrouping === 'Non-current Assets'
+    );
+    const currentLiabilities = mappedData.entries.filter(e => 
+      e.highLevelCategory === 'Liabilities' && e.mainGrouping === 'Current Liabilities'
+    );
+    const nonCurrentLiabilities = mappedData.entries.filter(e => 
+      e.highLevelCategory === 'Liabilities' && e.mainGrouping === 'Non-current Liabilities'
+    );
+    const equity = mappedData.entries.filter(e => e.highLevelCategory === 'Equity');
+    const revenue = mappedData.entries.filter(e => e.highLevelCategory === 'Revenue');
+    const expenses = mappedData.entries.filter(e => e.highLevelCategory === 'Expenses');
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 mb-4">
+          <ArrowRight className="h-5 w-5 text-success" />
+          <h2 className="text-2xl font-bold">IFRS Mapping Engine</h2>
+          <Badge variant="default" className="ml-auto">
+            {mappedData.entries.length} items mapped
+          </Badge>
+        </div>
+
+        <Tabs defaultValue="balance-sheet" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="balance-sheet">Balance Sheet</TabsTrigger>
+            <TabsTrigger value="income-statement">Income Statement</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="balance-sheet" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Assets Panel */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold text-center p-3 bg-primary/10 rounded-lg">
+                  ASSETS
+                </h3>
+                <CategoryPanel 
+                  title="Current Assets" 
+                  entries={currentAssets}
+                  bgColor="bg-blue-50/50 dark:bg-blue-950/20"
+                />
+                <CategoryPanel 
+                  title="Non-Current Assets" 
+                  entries={nonCurrentAssets}
+                  bgColor="bg-blue-50/30 dark:bg-blue-950/10"
+                />
+              </div>
+
+              {/* Liabilities & Equity Panel */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold text-center p-3 bg-secondary/10 rounded-lg">
+                  LIABILITIES & EQUITY
+                </h3>
+                <CategoryPanel 
+                  title="Current Liabilities" 
+                  entries={currentLiabilities}
+                  bgColor="bg-orange-50/50 dark:bg-orange-950/20"
+                />
+                <CategoryPanel 
+                  title="Non-Current Liabilities" 
+                  entries={nonCurrentLiabilities}
+                  bgColor="bg-orange-50/30 dark:bg-orange-950/10"
+                />
+                <CategoryPanel 
+                  title="Equity" 
+                  entries={equity}
+                  bgColor="bg-green-50/50 dark:bg-green-950/20"
+                />
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="income-statement" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <CategoryPanel 
+                title="Revenue" 
+                entries={revenue}
+                bgColor="bg-green-50/50 dark:bg-green-950/20"
+              />
+              <CategoryPanel 
+                title="Expenses" 
+                entries={expenses}
+                bgColor="bg-red-50/50 dark:bg-red-950/20"
+              />
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        <div className="flex justify-center pt-6">
+          <Button 
+            onClick={() => window.location.href = '/mapping'}
+            size="lg"
+            className="gap-2"
+          >
+            Continue to Full Mapping Interface
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -262,234 +479,245 @@ export function PdfUpload() {
         <p className="text-muted-foreground">Upload financial statements in PDF format for automated extraction and analysis</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>File Upload</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div
-              className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-lg font-medium mb-2">
-                {uploadedFile ? 'File Selected' : 'Click to upload PDF'}
-              </p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Upload Annual Reports, Financial Statements, or audit reports (PDF only)
-              </p>
-              {uploadedFile && (
-                <div className="flex items-center justify-center gap-2 text-sm">
-                  <FileText className="h-4 w-4" />
-                  <span className="font-medium">{uploadedFile.name}</span>
-                  <Badge variant="secondary">{formatFileSize(uploadedFile.size)}</Badge>
-                </div>
-              )}
-            </div>
+      {/* Show PDF Preview after file upload but before mapping engine */}
+      {showPreview && !showMappingEngine && <PdfPreview />}
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              onChange={handleFileSelect}
-              className="hidden"
-            />
+      {/* Show Mapping Engine after processing completes */}
+      {showMappingEngine && <MappingEngine />}
 
-            {uploadedFile && !isProcessing && progress === 0 && (
-              <Button onClick={simulateProcessing} className="w-full" size="lg">
-                Start Processing
-              </Button>
-            )}
-
-            {isProcessing && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Processing Progress</span>
-                    <span>{Math.round(progress)}%</span>
-                  </div>
-                  <Progress value={progress} className="w-full" />
-                </div>
-              </div>
-            )}
-
-            {progress === 100 && !isProcessing && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-success">
-                  <CheckCircle className="h-5 w-5" />
-                  <span className="font-medium">Processing Complete</span>
-                </div>
-                <Button 
-                  onClick={() => window.location.href = '/'}
-                  className="w-full" 
-                  size="lg"
-                >
-                  View Dashboard
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Processing Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {steps.map((step, index) => (
+      {/* Original upload interface - hide when mapping engine is shown */}
+      {!showMappingEngine && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>File Upload</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div
-                  key={step.id}
-                  className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
-                    step.status === 'processing' ? 'bg-primary/10' : 
-                    step.status === 'completed' ? 'bg-success/10' :
-                    'bg-muted/30'
-                  }`}
+                  className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-primary transition-colors cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
                 >
-                  {getStepIcon(step.status)}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-sm">{step.label}</p>
-                      <Badge 
-                        variant={
-                          step.status === 'completed' ? 'default' :
-                          step.status === 'processing' ? 'secondary' :
-                          'outline'
-                        }
-                        className="text-xs"
-                      >
-                        {step.status}
-                      </Badge>
+                  <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg font-medium mb-2">
+                    {uploadedFile ? 'File Selected' : 'Click to upload PDF'}
+                  </p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Upload Annual Reports, Financial Statements, or audit reports (PDF only)
+                  </p>
+                  {uploadedFile && (
+                    <div className="flex items-center justify-center gap-2 text-sm">
+                      <FileText className="h-4 w-4" />
+                      <span className="font-medium">{uploadedFile.name}</span>
+                      <Badge variant="secondary">{formatFileSize(uploadedFile.size)}</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {step.description}
-                    </p>
-                  </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
 
-        {showTransparency && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {uploadedFile && !isProcessing && progress === 0 && (
+                  <Button onClick={simulateProcessing} className="w-full" size="lg">
+                    Start Processing
+                  </Button>
+                )}
+
+                {isProcessing && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span>Processing Progress</span>
+                        <span>{Math.round(progress)}%</span>
+                      </div>
+                      <Progress value={progress} className="w-full" />
+                    </div>
+                  </div>
+                )}
+
+                {progress === 100 && !isProcessing && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle className="h-5 w-5" />
+                      <span className="font-medium">Processing Complete</span>
+                    </div>
+                    <Button 
+                      onClick={() => window.location.href = '/'}
+                      className="w-full" 
+                      size="lg"
+                    >
+                      View Dashboard
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Processing Steps</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {steps.map((step, index) => (
+                    <div
+                      key={step.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
+                        step.status === 'processing' ? 'bg-primary/10' : 
+                        step.status === 'completed' ? 'bg-success/10' :
+                        'bg-muted/30'
+                      }`}
+                    >
+                      {getStepIcon(step.status)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm">{step.label}</p>
+                          <Badge 
+                            variant={
+                              step.status === 'completed' ? 'default' :
+                              step.status === 'processing' ? 'secondary' :
+                              'outline'
+                            }
+                            className="text-xs"
+                          >
+                            {step.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {step.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {showTransparency && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Eye className="h-5 w-5" />
+                    Processing Transparency
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Processing Logs */}
+                  <div>
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <FileSearch className="h-4 w-4" />
+                      Processing Log
+                    </h3>
+                    <div className="bg-muted/30 rounded-lg p-4 max-h-48 overflow-y-auto">
+                      <div className="space-y-2 font-mono text-sm">
+                        {processingLogs.map(log => (
+                          <div key={log.id} className="flex items-start gap-3">
+                            <span className="text-xs text-muted-foreground shrink-0 mt-0.5">
+                              {log.timestamp}
+                            </span>
+                            <span className={`text-xs ${
+                              log.type === 'success' ? 'text-success' : 
+                              log.type === 'warning' ? 'text-warning' : 
+                              'text-foreground'
+                            }`}>
+                              {log.message}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Extracted Items Preview */}
+                  {extractedItems.length > 0 && (
+                    <div>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        Extracted Items ({extractedItems.length})
+                      </h3>
+                      <div className="overflow-x-auto border rounded-lg">
+                        <table className="w-full border-collapse">
+                          <thead className="bg-muted/50">
+                            <tr className="border-b border-border">
+                              <th className="text-left p-3 font-medium">Description</th>
+                              <th className="text-right p-3 font-medium">Amount</th>
+                              <th className="text-left p-3 font-medium">Category</th>
+                              <th className="text-center p-3 font-medium">Confidence</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {extractedItems.map((item, index) => (
+                              <tr key={index} className="border-b border-border hover:bg-muted/30">
+                                <td className="p-3 font-medium">{item.description}</td>
+                                <td className="p-3 text-right font-mono">
+                                  {new Intl.NumberFormat('en-US', { 
+                                    style: 'currency', 
+                                    currency: 'USD',
+                                    minimumFractionDigits: 0 
+                                  }).format(item.amount)}
+                                </td>
+                                <td className="p-3">{item.category}</td>
+                                <td className="p-3 text-center">
+                                  <Badge 
+                                    variant={
+                                      item.confidence === 'high' ? 'default' :
+                                      item.confidence === 'medium' ? 'secondary' :
+                                      'outline'
+                                    }
+                                    className="text-xs"
+                                  >
+                                    {item.confidence}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Eye className="h-5 w-5" />
-                Processing Transparency
-              </CardTitle>
+              <CardTitle>Supported File Types & Requirements</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Processing Logs */}
-              <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <FileSearch className="h-4 w-4" />
-                  Processing Log
-                </h3>
-                <div className="bg-muted/30 rounded-lg p-4 max-h-48 overflow-y-auto">
-                  <div className="space-y-2 font-mono text-sm">
-                    {processingLogs.map(log => (
-                      <div key={log.id} className="flex items-start gap-3">
-                        <span className="text-xs text-muted-foreground shrink-0 mt-0.5">
-                          {log.timestamp}
-                        </span>
-                        <span className={`text-xs ${
-                          log.type === 'success' ? 'text-success' : 
-                          log.type === 'warning' ? 'text-warning' : 
-                          'text-foreground'
-                        }`}>
-                          {log.message}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="font-semibold mb-3">Supported Documents</h3>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li>• Annual Reports with Financial Statements</li>
+                    <li>• Standalone Financial Statements</li>
+                    <li>• Audited Financial Reports</li>
+                    <li>• Management Accounts (formatted)</li>
+                    <li>• Quarterly/Interim Reports</li>
+                  </ul>
+                </div>
+                
+                <div>
+                  <h3 className="font-semibold mb-3">Processing Features</h3>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li>• Automatic table detection and extraction</li>
+                    <li>• IFRS-compliant account mapping</li>
+                    <li>• Multi-period data support</li>
+                    <li>• Segment and subsidiary consolidation</li>
+                    <li>• Data validation and error checking</li>
+                  </ul>
                 </div>
               </div>
-
-              {/* Extracted Items Preview */}
-              {extractedItems.length > 0 && (
-                <div>
-                  <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <MapPin className="h-4 w-4" />
-                    Extracted Items ({extractedItems.length})
-                  </h3>
-                  <div className="overflow-x-auto border rounded-lg">
-                    <table className="w-full border-collapse">
-                      <thead className="bg-muted/50">
-                        <tr className="border-b border-border">
-                          <th className="text-left p-3 font-medium">Description</th>
-                          <th className="text-right p-3 font-medium">Amount</th>
-                          <th className="text-left p-3 font-medium">Category</th>
-                          <th className="text-center p-3 font-medium">Confidence</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {extractedItems.map((item, index) => (
-                          <tr key={index} className="border-b border-border hover:bg-muted/30">
-                            <td className="p-3 font-medium">{item.description}</td>
-                            <td className="p-3 text-right font-mono">
-                              {new Intl.NumberFormat('en-US', { 
-                                style: 'currency', 
-                                currency: 'USD',
-                                minimumFractionDigits: 0 
-                              }).format(item.amount)}
-                            </td>
-                            <td className="p-3">{item.category}</td>
-                            <td className="p-3 text-center">
-                              <Badge 
-                                variant={
-                                  item.confidence === 'high' ? 'default' :
-                                  item.confidence === 'medium' ? 'secondary' :
-                                  'outline'
-                                }
-                                className="text-xs"
-                              >
-                                {item.confidence}
-                              </Badge>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
-        )}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Supported File Types & Requirements</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-semibold mb-3">Supported Documents</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>• Annual Reports with Financial Statements</li>
-                <li>• Standalone Financial Statements</li>
-                <li>• Audited Financial Reports</li>
-                <li>• Management Accounts (formatted)</li>
-                <li>• Quarterly/Interim Reports</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="font-semibold mb-3">Processing Features</h3>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>• Automatic table detection and extraction</li>
-                <li>• IFRS-compliant account mapping</li>
-                <li>• Multi-period data support</li>
-                <li>• Segment and subsidiary consolidation</li>
-                <li>• Data validation and error checking</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </>
+      )}
     </div>
   );
 }
