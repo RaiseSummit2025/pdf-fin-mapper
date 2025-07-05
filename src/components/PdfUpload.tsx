@@ -319,54 +319,113 @@ export function PdfUpload() {
         minimumFractionDigits: 0 
       }).format(amount);
 
-    const CategoryPanel = ({ 
+    // Group entries by IFRS category for more detailed mapping
+    const groupByIFRSCategory = (entries: FinancialEntry[]) => {
+      const grouped: { [key: string]: FinancialEntry[] } = {};
+      entries.forEach(entry => {
+        if (!grouped[entry.ifrsCategory]) {
+          grouped[entry.ifrsCategory] = [];
+        }
+        grouped[entry.ifrsCategory].push(entry);
+      });
+      return grouped;
+    };
+
+    const FinancialLineItem = ({ entry }: { entry: FinancialEntry }) => (
+      <div className="flex items-center justify-between p-2 rounded bg-muted/20 hover:bg-muted/40 transition-colors group border border-border/50">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{entry.description}</p>
+          <p className="text-xs text-muted-foreground">{entry.date}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm font-medium">
+            {formatCurrency(entry.amount)}
+          </span>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <Move className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    );
+
+    const IFRSCategorySection = ({ 
+      categoryName, 
+      entries, 
+      bgColor = "bg-muted/30" 
+    }: { 
+      categoryName: string; 
+      entries: FinancialEntry[];
+      bgColor?: string;
+    }) => {
+      if (entries.length === 0) return null;
+      
+      const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+      
+      return (
+        <div className={`p-3 rounded-lg border ${bgColor}`}>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="font-semibold text-sm">{categoryName}</h4>
+            <Badge variant="outline" className="text-xs font-mono">
+              {formatCurrency(total)}
+            </Badge>
+          </div>
+          <div className="space-y-1">
+            {entries.map((entry) => (
+              <FinancialLineItem key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </div>
+      );
+    };
+
+    const MainCategoryPanel = ({ 
       title, 
       entries, 
-      bgColor = "bg-background" 
+      bgColor = "bg-background",
+      headerColor = "bg-primary/10"
     }: { 
       title: string; 
       entries: FinancialEntry[];
       bgColor?: string;
-    }) => (
-      <Card className={`${bgColor} border-2`}>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center justify-between">
-            {title}
-            <Badge variant="secondary" className="text-xs">
-              {entries.length} items
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {entries.map((entry) => (
-            <div 
-              key={entry.id} 
-              className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors group"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate">{entry.description}</p>
-                <p className="text-xs text-muted-foreground">
-                  {entry.ifrsCategory}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-medium">
-                  {formatCurrency(entry.amount)}
-                </span>
-                <Button 
-                  size="sm" 
-                  variant="ghost" 
-                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Move className="h-3 w-3" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    );
+      headerColor?: string;
+    }) => {
+      const groupedEntries = groupByIFRSCategory(entries);
+      const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+      
+      return (
+        <Card className={`${bgColor} border-2`}>
+          <CardHeader className={`${headerColor} pb-3`}>
+            <CardTitle className="text-lg flex items-center justify-between">
+              {title}
+              <Badge variant="secondary" className="font-mono">
+                {formatCurrency(total)}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Object.entries(groupedEntries).map(([category, categoryEntries]) => (
+              <IFRSCategorySection
+                key={category}
+                categoryName={category}
+                entries={categoryEntries}
+                bgColor="bg-background/50"
+              />
+            ))}
+            {entries.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                No items mapped to this category yet
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      );
+    };
 
+    // Filter data by categories
     const currentAssets = mappedData.entries.filter(e => 
       e.highLevelCategory === 'Assets' && e.mainGrouping === 'Current Assets'
     );
@@ -403,40 +462,49 @@ export function PdfUpload() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Assets Panel */}
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-center p-3 bg-primary/10 rounded-lg">
-                  ASSETS
-                </h3>
-                <CategoryPanel 
-                  title="Current Assets" 
-                  entries={currentAssets}
-                  bgColor="bg-blue-50/50 dark:bg-blue-950/20"
-                />
-                <CategoryPanel 
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold p-4 bg-primary/10 rounded-lg border-2 border-primary/20">
+                    ASSETS
+                  </h3>
+                </div>
+                <MainCategoryPanel 
                   title="Non-Current Assets" 
                   entries={nonCurrentAssets}
                   bgColor="bg-blue-50/30 dark:bg-blue-950/10"
+                  headerColor="bg-blue-100/50 dark:bg-blue-900/20"
+                />
+                <MainCategoryPanel 
+                  title="Current Assets" 
+                  entries={currentAssets}
+                  bgColor="bg-blue-50/50 dark:bg-blue-950/20"
+                  headerColor="bg-blue-100/70 dark:bg-blue-900/30"
                 />
               </div>
 
               {/* Liabilities & Equity Panel */}
               <div className="space-y-4">
-                <h3 className="text-xl font-semibold text-center p-3 bg-secondary/10 rounded-lg">
-                  LIABILITIES & EQUITY
-                </h3>
-                <CategoryPanel 
-                  title="Current Liabilities" 
-                  entries={currentLiabilities}
-                  bgColor="bg-orange-50/50 dark:bg-orange-950/20"
-                />
-                <CategoryPanel 
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold p-4 bg-secondary/10 rounded-lg border-2 border-secondary/20">
+                    LIABILITIES & EQUITY
+                  </h3>
+                </div>
+                <MainCategoryPanel 
                   title="Non-Current Liabilities" 
                   entries={nonCurrentLiabilities}
                   bgColor="bg-orange-50/30 dark:bg-orange-950/10"
+                  headerColor="bg-orange-100/50 dark:bg-orange-900/20"
                 />
-                <CategoryPanel 
+                <MainCategoryPanel 
+                  title="Current Liabilities" 
+                  entries={currentLiabilities}
+                  bgColor="bg-orange-50/50 dark:bg-orange-950/20"
+                  headerColor="bg-orange-100/70 dark:bg-orange-900/30"
+                />
+                <MainCategoryPanel 
                   title="Equity" 
                   entries={equity}
                   bgColor="bg-green-50/50 dark:bg-green-950/20"
+                  headerColor="bg-green-100/70 dark:bg-green-900/30"
                 />
               </div>
             </div>
@@ -444,16 +512,33 @@ export function PdfUpload() {
 
           <TabsContent value="income-statement" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CategoryPanel 
-                title="Revenue" 
-                entries={revenue}
-                bgColor="bg-green-50/50 dark:bg-green-950/20"
-              />
-              <CategoryPanel 
-                title="Expenses" 
-                entries={expenses}
-                bgColor="bg-red-50/50 dark:bg-red-950/20"
-              />
+              <div className="space-y-4">
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold p-4 bg-green-100/50 dark:bg-green-900/20 rounded-lg border-2 border-green-200/50 dark:border-green-800/50">
+                    REVENUES
+                  </h3>
+                </div>
+                <MainCategoryPanel 
+                  title="Revenue" 
+                  entries={revenue}
+                  bgColor="bg-green-50/50 dark:bg-green-950/20"
+                  headerColor="bg-green-100/70 dark:bg-green-900/30"
+                />
+              </div>
+              
+              <div className="space-y-4">
+                <div className="text-center">
+                  <h3 className="text-2xl font-bold p-4 bg-red-100/50 dark:bg-red-900/20 rounded-lg border-2 border-red-200/50 dark:border-red-800/50">
+                    EXPENSES
+                  </h3>
+                </div>
+                <MainCategoryPanel 
+                  title="Expenses" 
+                  entries={expenses}
+                  bgColor="bg-red-50/50 dark:bg-red-950/20"
+                  headerColor="bg-red-100/70 dark:bg-red-900/30"
+                />
+              </div>
             </div>
           </TabsContent>
         </Tabs>
