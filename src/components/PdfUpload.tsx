@@ -1,4 +1,3 @@
-
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -159,7 +158,8 @@ const DraggableAmount = ({ id, amount, description }: DraggableAmountProps) => {
     new Intl.NumberFormat('en-US', { 
       style: 'currency', 
       currency: 'USD',
-      minimumFractionDigits: 0 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     }).format(Math.abs(amount));
 
   return (
@@ -168,7 +168,7 @@ const DraggableAmount = ({ id, amount, description }: DraggableAmountProps) => {
       style={style}
       {...attributes}
       {...listeners}
-      className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded px-3 py-1 cursor-move hover:bg-blue-100 transition-colors"
+      className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded px-3 py-1 cursor-grab active:cursor-grabbing hover:bg-blue-100 transition-colors"
       title={description}
     >
       <span className="text-sm font-semibold text-blue-900">{formatCurrency(amount)}</span>
@@ -189,7 +189,11 @@ export function PdfUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -300,40 +304,43 @@ export function PdfUpload() {
     const activeId = active.id as string;
     const overId = over.id as string;
 
-    // Only process drops on category containers
-    if (!overId.includes('::')) return;
+    console.log('Drag end:', { activeId, overId });
 
-    const draggedEntry = mappedData.entries.find(entry => entry.id === activeId);
-    if (!draggedEntry) return;
+    // Handle drops on category containers
+    if (overId.includes('::')) {
+      const draggedEntry = mappedData.entries.find(entry => entry.id === activeId);
+      if (!draggedEntry) return;
 
-    const [targetHighLevel, targetGrouping, targetCategory] = overId.split('::');
+      const [targetHighLevel, targetGrouping, targetCategory] = overId.split('::');
 
-    const updatedEntries = mappedData.entries.map(entry => 
-      entry.id === activeId 
-        ? { 
-            ...entry, 
-            highLevelCategory: targetHighLevel as any,
-            mainGrouping: targetGrouping,
-            ifrsCategory: targetCategory
-          }
-        : entry
-    );
+      const updatedEntries = mappedData.entries.map(entry => 
+        entry.id === activeId 
+          ? { 
+              ...entry, 
+              highLevelCategory: targetHighLevel as any,
+              mainGrouping: targetGrouping,
+              ifrsCategory: targetCategory
+            }
+          : entry
+      );
 
-    const updatedData = { ...mappedData, entries: updatedEntries };
-    setMappedData(updatedData);
-    setFinancialData(updatedData);
+      const updatedData = { ...mappedData, entries: updatedEntries };
+      setMappedData(updatedData);
+      setFinancialData(updatedData);
 
-    toast({
-      title: "Item Remapped",
-      description: `Amount moved to ${targetCategory}`,
-    });
+      toast({
+        title: "Item Remapped",
+        description: `${draggedEntry.description} moved to ${targetCategory}`,
+      });
+    }
   };
 
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-US', { 
       style: 'currency', 
       currency: 'USD',
-      minimumFractionDigits: 0 
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
     }).format(Math.abs(amount));
 
   const getStepIcon = (status: ProcessingStep['status']) => {
@@ -360,7 +367,7 @@ export function PdfUpload() {
   }) => (
     <div 
       id={dropId}
-      className="border border-gray-200 rounded-lg p-4 min-h-[100px] bg-white hover:border-blue-300 transition-colors"
+      className="border border-gray-200 rounded-lg p-4 min-h-[120px] bg-white hover:border-blue-300 transition-colors"
     >
       <div className="flex justify-between items-center mb-3">
         <h4 className="font-medium text-gray-900 text-sm">{title}</h4>
@@ -370,24 +377,24 @@ export function PdfUpload() {
       </div>
       
       {entries.length === 0 ? (
-        <div className="text-center text-gray-400 text-sm py-6">
-          <div className="text-xs opacity-60">Drop accounts here</div>
+        <div className="text-center text-gray-400 text-sm py-8 border-2 border-dashed border-gray-200 rounded">
+          <div className="text-xs opacity-60">Drop amounts here</div>
         </div>
       ) : (
-        <SortableContext items={entries.map(e => e.id)} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
-            {entries.map((entry) => (
-              <div key={entry.id} className="flex justify-between items-center text-sm">
-                <span className="text-gray-700 truncate flex-1 mr-2">{entry.description}</span>
+        <div className="space-y-2">
+          {entries.map((entry) => (
+            <div key={entry.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+              <span className="text-gray-700 truncate flex-1 mr-2 text-xs">{entry.description}</span>
+              <SortableContext items={[entry.id]} strategy={verticalListSortingStrategy}>
                 <DraggableAmount 
                   id={entry.id}
                   amount={entry.amount}
                   description={entry.description}
                 />
-              </div>
-            ))}
-          </div>
-        </SortableContext>
+              </SortableContext>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
