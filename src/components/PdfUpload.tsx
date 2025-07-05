@@ -91,12 +91,14 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   'accumulated profit': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
   'owner equity': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
   'profit for the year': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
+  'profit for the current year': { ifrsCategory: 'Retained Earnings', highLevelCategory: 'Equity', mainGrouping: 'Equity' },
   
   // Liabilities - Non-current
   'long term loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
   'term loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
   'bank loan': { ifrsCategory: 'Borrowings', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
   'lease liability': { ifrsCategory: 'Lease Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
+  'lease liability - current': { ifrsCategory: 'Lease Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Current Liabilities' },
   'provision': { ifrsCategory: 'Provisions', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
   'deferred tax liability': { ifrsCategory: 'Deferred Tax Liabilities', highLevelCategory: 'Liabilities', mainGrouping: 'Non-current Liabilities' },
   
@@ -123,6 +125,7 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   // Expenses
   'cost of sales': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
   'cost of goods sold': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
+  'cost of raw materials consumed': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
   'material': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
   'direct labor': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
   'manufacturing': { ifrsCategory: 'Cost of Sales', highLevelCategory: 'Expenses', mainGrouping: 'Cost of Sales' },
@@ -139,20 +142,32 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   'marketing': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
   'advertising': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
   'sales commission': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
+  'sales commission and incentives': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
   'promotion': { ifrsCategory: 'Selling Expenses', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
   'depreciation': { ifrsCategory: 'Depreciation and Amortisation', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
   'amortisation': { ifrsCategory: 'Depreciation and Amortisation', highLevelCategory: 'Expenses', mainGrouping: 'Operating Expenses' },
   'interest expense': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
+  'interest expense on bank loans': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
   'finance cost': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
   'tax expense': { ifrsCategory: 'Income Tax Expense', highLevelCategory: 'Expenses', mainGrouping: 'Tax' },
 };
 
 // Fuzzy matching function to map account descriptions to IFRS categories
-const mapDescriptionToIFRS = (description: string): { ifrsCategory: string; highLevelCategory: FinancialEntry['highLevelCategory']; mainGrouping: string } => {
+const mapDescriptionToIFRS = (
+  description: string
+): {
+  ifrsCategory: string;
+  highLevelCategory: FinancialEntry['highLevelCategory'];
+  mainGrouping: string;
+} => {
   const lowerDesc = description.toLowerCase();
-  
-  // Try exact matches first
-  for (const [keyword, mapping] of Object.entries(IFRS_MAPPING_DICTIONARY)) {
+
+  // Sort keywords by length to match more specific phrases first
+  const sortedEntries = Object.entries(IFRS_MAPPING_DICTIONARY).sort(
+    ([a], [b]) => b.length - a.length
+  );
+
+  for (const [keyword, mapping] of sortedEntries) {
     if (lowerDesc.includes(keyword)) {
       return mapping;
     }
