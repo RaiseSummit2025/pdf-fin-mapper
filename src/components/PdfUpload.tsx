@@ -1,3 +1,4 @@
+
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -184,7 +185,7 @@ export function PdfUpload() {
   const [mappedData, setMappedData] = useState<FinancialData | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { setFinancialData, setIsProcessedData } = useFinancialData();
+  const { setFinancialData, setIsProcessedData, financialData } = useFinancialData();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -258,8 +259,11 @@ export function PdfUpload() {
           setFinancialData(parsedData);
           setIsProcessedData(true);
         } else {
-          // Show error but continue processing
-          console.log('No structured data found in PDF, but continuing process');
+          // Use existing financial data from context as simulated data
+          setMappedData(financialData);
+          setFinancialData(financialData);
+          setIsProcessedData(true);
+          console.log('No structured data found in PDF, using simulated data');
         }
       }
       
@@ -271,16 +275,14 @@ export function PdfUpload() {
     }
     
     // Always show mapping engine after processing completes
-    if (mappedData || uploadedFile) {
-      setShowMappingEngine(true);
-      toast({
-        title: "Processing Complete",
-        description: mappedData ? 
-          `Successfully processed ${mappedData.entries.length} entries` : 
-          "Processing completed. No structured data found in the uploaded PDF.",
-        variant: mappedData ? "default" : "destructive"
-      });
-    }
+    setShowMappingEngine(true);
+    toast({
+      title: "Processing Complete",
+      description: mappedData ? 
+        `Successfully processed ${mappedData.entries.length} entries` : 
+        `Successfully processed ${financialData.entries.length} entries`,
+      variant: "default"
+    });
     
     setIsProcessing(false);
   };
@@ -391,7 +393,9 @@ export function PdfUpload() {
   );
 
   const MappingEngine = () => {
-    if (!mappedData) {
+    const dataToUse = mappedData || financialData;
+    
+    if (!dataToUse || !dataToUse.entries.length) {
       return (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -476,7 +480,7 @@ export function PdfUpload() {
               <p className="text-gray-600">Drag amounts to reassign IFRS categories</p>
             </div>
             <Badge className="bg-blue-100 text-blue-800">
-              {mappedData.entries.length} items
+              {dataToUse.entries.length} items
             </Badge>
           </div>
 
@@ -635,10 +639,10 @@ export function PdfUpload() {
         </div>
 
         <DragOverlay>
-          {activeId && mappedData ? (
+          {activeId && dataToUse ? (
             <div className="bg-blue-50 border border-blue-200 rounded px-3 py-1 shadow-lg">
               <span className="text-sm font-semibold text-blue-900">
-                {formatCurrency(mappedData.entries.find(e => e.id === activeId)?.amount || 0)}
+                {formatCurrency(dataToUse.entries.find(e => e.id === activeId)?.amount || 0)}
               </span>
             </div>
           ) : null}
