@@ -4,12 +4,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mockFinancialData, ifrsCategories } from '@/data/mockData';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { ifrsCategories } from '@/data/mockData';
 import { FinancialEntry } from '@/types/financial';
 import { Edit, Save, X } from 'lucide-react';
 
 export function DataMapping() {
-  const [entries, setEntries] = useState<FinancialEntry[]>(mockFinancialData.entries);
+  const { financialData, setFinancialData } = useFinancialData();
+  const [entries, setEntries] = useState<FinancialEntry[]>(financialData.entries);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempCategory, setTempCategory] = useState<string>('');
   
@@ -26,11 +28,13 @@ export function DataMapping() {
   };
 
   const handleSaveCategory = (entryId: string) => {
-    setEntries(entries.map(entry => 
+    const updatedEntries = entries.map(entry => 
       entry.id === entryId 
         ? { ...entry, ifrsCategory: tempCategory }
         : entry
-    ));
+    );
+    setEntries(updatedEntries);
+    setFinancialData({ ...financialData, entries: updatedEntries });
     setEditingId(null);
     setTempCategory('');
   };

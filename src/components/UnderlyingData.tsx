@@ -4,12 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockFinancialData } from '@/data/mockData';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FinancialEntry } from '@/types/financial';
 import { Search, Download, Filter } from 'lucide-react';
 
 export function UnderlyingData() {
-  const [entries] = useState<FinancialEntry[]>(mockFinancialData.entries);
+  const { financialData } = useFinancialData();
+  const [entries] = useState<FinancialEntry[]>(financialData.entries);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<keyof FinancialEntry>('description');

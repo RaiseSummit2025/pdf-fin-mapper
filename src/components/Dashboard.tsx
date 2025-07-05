@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { mockFinancialData } from '@/data/mockData';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
 
 export function Dashboard() {
-  const { entries, companyName, reportPeriod } = mockFinancialData;
+  const { financialData } = useFinancialData();
+  const { entries, companyName, reportPeriod } = financialData;
 
   // Calculate key metrics
   const totalAssets = entries

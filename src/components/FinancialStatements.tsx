@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockFinancialData } from '@/data/mockData';
+import { useFinancialData } from '@/contexts/FinancialDataContext';
 
 export function FinancialStatements() {
-  const { entries, companyName, reportPeriod } = mockFinancialData;
+  const { financialData } = useFinancialData();
+  const { entries, companyName, reportPeriod } = financialData;
   
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-US', { 
