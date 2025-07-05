@@ -18,6 +18,8 @@ import {
   DragEndEvent,
   DragStartEvent,
   DragOverlay,
+  DropAnimation,
+  defaultDropAnimationSideEffects,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -138,6 +140,16 @@ const mapDescriptionToIFRS = (description: string) => {
   };
 };
 
+const dropAnimationConfig: DropAnimation = {
+  sideEffects: defaultDropAnimationSideEffects({
+    styles: {
+      active: {
+        opacity: '0.4',
+      },
+    },
+  }),
+};
+
 const DraggableAmount = ({ id, amount, description }: DraggableAmountProps) => {
   const {
     attributes,
@@ -158,8 +170,8 @@ const DraggableAmount = ({ id, amount, description }: DraggableAmountProps) => {
     new Intl.NumberFormat('en-US', { 
       style: 'currency', 
       currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(Math.abs(amount));
 
   return (
@@ -233,6 +245,7 @@ export function PdfUpload() {
     if (file && file.type === 'application/pdf') {
       setUploadedFile(file);
       setShowMappingEngine(false);
+      setMappedData(null);
       setSteps(processingSteps.map(step => ({ ...step, status: 'pending' })));
       setProgress(0);
     } else {
@@ -264,8 +277,9 @@ export function PdfUpload() {
           setIsProcessedData(true);
         } else {
           // Use existing financial data from context as simulated data
-          setMappedData(financialData);
-          setFinancialData(financialData);
+          const currentData = { ...financialData };
+          setMappedData(currentData);
+          setFinancialData(currentData);
           setIsProcessedData(true);
           console.log('No structured data found in PDF, using simulated data');
         }
@@ -278,17 +292,14 @@ export function PdfUpload() {
       setProgress(((i + 1) / steps.length) * 100);
     }
     
-    // Always show mapping engine after processing completes
     setShowMappingEngine(true);
+    setIsProcessing(false);
+    
     toast({
       title: "Processing Complete",
-      description: mappedData ? 
-        `Successfully processed ${mappedData.entries.length} entries` : 
-        `Successfully processed ${financialData.entries.length} entries`,
+      description: `Successfully processed ${financialData.entries.length} entries`,
       variant: "default"
     });
-    
-    setIsProcessing(false);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -306,18 +317,19 @@ export function PdfUpload() {
 
     console.log('Drag end:', { activeId, overId });
 
-    // Handle drops on category containers
-    if (overId.includes('::')) {
-      const draggedEntry = mappedData.entries.find(entry => entry.id === activeId);
-      if (!draggedEntry) return;
+    // Find the dragged entry
+    const draggedEntry = mappedData.entries.find(entry => entry.id === activeId);
+    if (!draggedEntry) return;
 
+    // Handle drops on category containers (identified by '::' in the id)
+    if (overId.includes('::')) {
       const [targetHighLevel, targetGrouping, targetCategory] = overId.split('::');
 
       const updatedEntries = mappedData.entries.map(entry => 
         entry.id === activeId 
           ? { 
               ...entry, 
-              highLevelCategory: targetHighLevel as any,
+              highLevelCategory: targetHighLevel as FinancialEntry['highLevelCategory'],
               mainGrouping: targetGrouping,
               ifrsCategory: targetCategory
             }
@@ -333,14 +345,48 @@ export function PdfUpload() {
         description: `${draggedEntry.description} moved to ${targetCategory}`,
       });
     }
+    // Handle swapping between entries
+    else {
+      const targetEntry = mappedData.entries.find(entry => entry.id === overId);
+      if (!targetEntry || activeId === overId) return;
+
+      const updatedEntries = mappedData.entries.map(entry => {
+        if (entry.id === activeId) {
+          return {
+            ...entry,
+            highLevelCategory: targetEntry.highLevelCategory,
+            mainGrouping: targetEntry.mainGrouping,
+            ifrsCategory: targetEntry.ifrsCategory
+          };
+        }
+        if (entry.id === overId) {
+          return {
+            ...entry,
+            highLevelCategory: draggedEntry.highLevelCategory,
+            mainGrouping: draggedEntry.mainGrouping,
+            ifrsCategory: draggedEntry.ifrsCategory
+          };
+        }
+        return entry;
+      });
+
+      const updatedData = { ...mappedData, entries: updatedEntries };
+      setMappedData(updatedData);
+      setFinancialData(updatedData);
+
+      toast({
+        title: "Items Swapped",
+        description: `Swapped categories between ${draggedEntry.description} and ${targetEntry.description}`,
+      });
+    }
   };
 
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-US', { 
       style: 'currency', 
       currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(Math.abs(amount));
 
   const getStepIcon = (status: ProcessingStep['status']) => {
@@ -381,20 +427,20 @@ export function PdfUpload() {
           <div className="text-xs opacity-60">Drop amounts here</div>
         </div>
       ) : (
-        <div className="space-y-2">
-          {entries.map((entry) => (
-            <div key={entry.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
-              <span className="text-gray-700 truncate flex-1 mr-2 text-xs">{entry.description}</span>
-              <SortableContext items={[entry.id]} strategy={verticalListSortingStrategy}>
+        <SortableContext items={entries.map(e => e.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {entries.map((entry) => (
+              <div key={entry.id} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded">
+                <span className="text-gray-700 truncate flex-1 mr-2 text-xs">{entry.description}</span>
                 <DraggableAmount 
                   id={entry.id}
                   amount={entry.amount}
                   description={entry.description}
                 />
-              </SortableContext>
-            </div>
-          ))}
-        </div>
+              </div>
+            ))}
+          </div>
+        </SortableContext>
       )}
     </div>
   );
@@ -435,17 +481,17 @@ export function PdfUpload() {
       );
     }
 
-    const nonCurrentAssets = mappedData.entries.filter(e => 
+    const nonCurrentAssets = dataToUse.entries.filter(e => 
       e.highLevelCategory === 'Assets' && e.mainGrouping === 'Non-current Assets'
     );
-    const currentAssets = mappedData.entries.filter(e => 
+    const currentAssets = dataToUse.entries.filter(e => 
       e.highLevelCategory === 'Assets' && e.mainGrouping === 'Current Assets'
     );
-    const equity = mappedData.entries.filter(e => e.highLevelCategory === 'Equity');
-    const nonCurrentLiabilities = mappedData.entries.filter(e => 
+    const equity = dataToUse.entries.filter(e => e.highLevelCategory === 'Equity');
+    const nonCurrentLiabilities = dataToUse.entries.filter(e => 
       e.highLevelCategory === 'Liabilities' && e.mainGrouping === 'Non-current Liabilities'
     );
-    const currentLiabilities = mappedData.entries.filter(e => 
+    const currentLiabilities = dataToUse.entries.filter(e => 
       e.highLevelCategory === 'Liabilities' && e.mainGrouping === 'Current Liabilities'
     );
 
@@ -471,6 +517,7 @@ export function PdfUpload() {
       leases: [...nonCurrentLiabilities, ...currentLiabilities].filter(e => e.ifrsCategory === 'Lease Liabilities'),
       payables: currentLiabilities.filter(e => e.ifrsCategory === 'Trade and Other Payables'),
       provisions: nonCurrentLiabilities.filter(e => e.ifrsCategory === 'Provisions'),
+      tax: currentLiabilities.filter(e => e.ifrsCategory === 'Tax Liabilities'),
     };
 
     return (
@@ -617,6 +664,11 @@ export function PdfUpload() {
                       dropId="Liabilities::Current Liabilities::Trade and Other Payables"
                     />
                     <IFRSCategory 
+                      title="Tax Liabilities" 
+                      entries={groupedEquityLiabilities.tax}
+                      dropId="Liabilities::Current Liabilities::Tax Liabilities"
+                    />
+                    <IFRSCategory 
                       title="Provisions" 
                       entries={groupedEquityLiabilities.provisions}
                       dropId="Liabilities::Non-current Liabilities::Provisions"
@@ -645,7 +697,7 @@ export function PdfUpload() {
           </div>
         </div>
 
-        <DragOverlay>
+        <DragOverlay dropAnimation={dropAnimationConfig}>
           {activeId && dataToUse ? (
             <div className="bg-blue-50 border border-blue-200 rounded px-3 py-1 shadow-lg">
               <span className="text-sm font-semibold text-blue-900">
