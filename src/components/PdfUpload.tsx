@@ -1,4 +1,9 @@
 import { useState, useRef } from 'react';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min?url';
+
+// Configure the worker source for pdf.js
+GlobalWorkerOptions.workerSrc = pdfWorker;
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -113,14 +118,25 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   'interest expense': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
 };
 
-// Basic text parser for uploaded files. In a real application this would use a
-// PDF parsing library but here we just read the file as text and try to extract
-// simple "Description Amount" lines. If no entries are recognised `null` is
-// returned which signals that the app should fall back to mock data.
+// Parse a PDF using pdf.js and attempt to map "Description Amount" lines into
+// structured financial data. If nothing is recognised `null` is returned so the
+// application can fall back to example data.
 const parseActualPDFData = async (file: File): Promise<FinancialData | null> => {
   try {
-    const text = await file.text();
     console.log('Attempting to parse PDF:', file.name);
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await getDocument({ data: arrayBuffer }).promise;
+
+    let text = '';
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      text +=
+        content.items
+          .map(item => ('str' in item ? (item as any).str : ''))
+          .join(' ') +
+        '\n';
+    }
 
     const lines = text
       .split(/\r?\n/)
