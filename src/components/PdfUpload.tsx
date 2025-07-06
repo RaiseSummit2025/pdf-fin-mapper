@@ -113,12 +113,54 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   'interest expense': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
 };
 
-// Simulate real PDF parsing - this would be replaced with actual PDF parsing logic
-const parseActualPDFData = (fileName: string): FinancialData | null => {
-  // This is a placeholder - in real implementation, this would parse the actual PDF file
-  // For now, return null to show "no data" state when no actual parsing is implemented
-  console.log('Attempting to parse PDF:', fileName);
-  return null;
+// Basic text parser for uploaded files. In a real application this would use a
+// PDF parsing library but here we just read the file as text and try to extract
+// simple "Description Amount" lines. If no entries are recognised `null` is
+// returned which signals that the app should fall back to mock data.
+const parseActualPDFData = async (file: File): Promise<FinancialData | null> => {
+  try {
+    const text = await file.text();
+    console.log('Attempting to parse PDF:', file.name);
+
+    const lines = text
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    const entries: FinancialEntry[] = [];
+
+    lines.forEach((line, index) => {
+      const match = line.match(/^(.+?)\s+(-?[\d,]+(?:\.\d+)?)$/);
+      if (!match) return;
+
+      const description = match[1].replace(/\s{2,}/g, ' ').trim();
+      const amount = parseFloat(match[2].replace(/,/g, ''));
+      const mapping = mapDescriptionToIFRS(description);
+
+      entries.push({
+        id: String(index + 1),
+        date: new Date().toISOString().slice(0, 10),
+        description,
+        amount,
+        highLevelCategory: mapping.highLevelCategory,
+        mainGrouping: mapping.mainGrouping,
+        ifrsCategory: mapping.ifrsCategory,
+        originalLine: line
+      });
+    });
+
+    if (entries.length === 0) return null;
+
+    return {
+      companyName: file.name,
+      reportPeriod: '',
+      entries,
+      lastUpdated: new Date().toISOString()
+    };
+  } catch (err) {
+    console.error('Failed to parse uploaded file', err);
+    return null;
+  }
 };
 
 const mapDescriptionToIFRS = (description: string) => {
@@ -269,7 +311,7 @@ export function PdfUpload() {
       
       if (i === 1) { // IFRS Mapping step
         // Try to parse actual PDF data
-        const parsedData = parseActualPDFData(uploadedFile?.name || '');
+        const parsedData = uploadedFile ? await parseActualPDFData(uploadedFile) : null;
         
         if (parsedData) {
           setMappedData(parsedData);
