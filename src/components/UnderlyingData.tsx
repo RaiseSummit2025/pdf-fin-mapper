@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FinancialEntry } from '@/types/financial';
+import { financialDataToCSV } from '@/lib/csv';
 import { Search, Download, Filter } from 'lucide-react';
 
 export function UnderlyingData() {
@@ -59,19 +60,7 @@ export function UnderlyingData() {
   };
 
   const handleExport = () => {
-    // Simulate export functionality
-    const csvContent = [
-      ['Date', 'Description', 'Original Line', 'Amount', 'High Level Category', 'Main Grouping', 'IFRS Category'],
-      ...filteredEntries.map(entry => [
-        entry.date,
-        entry.description,
-        entry.originalLine || '',
-        entry.amount.toString(),
-        entry.highLevelCategory,
-        entry.mainGrouping,
-        entry.ifrsCategory
-      ])
-    ].map(row => row.join(',')).join('\n');
+    const csvContent = financialDataToCSV(filteredEntries);
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
