@@ -113,6 +113,18 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   'interest expense': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
 };
 
+// Parse a single line of text into a description and numeric amount
+// Supports values like "1,234.00", "$1,234.00" and "(1,234.00)"
+const parseLine = (line: string): { description: string; amount: number } | null => {
+  const match = line.match(/^(.+?)\s+[\($]?\$?(-?[\d,]+(?:\.\d+)?)\)?$/);
+  if (!match) return null;
+  const [, desc, amountStr] = match;
+  const numeric = amountStr.replace(/[\$,()]/g, '');
+  const amount = parseFloat(numeric) * (amountStr.includes('(') ? -1 : 1);
+  if (isNaN(amount)) return null;
+  return { description: desc.trim(), amount };
+};
+
 // Enhanced PDF parsing with proper data structure
 const parseActualPDFData = (fileName: string): FinancialData | null => {
   console.log('Attempting to parse PDF:', fileName);
