@@ -1,49 +1,41 @@
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AppSidebar } from "@/components/AppSidebar";
-import { FinancialDataProvider } from "@/contexts/FinancialDataContext";
-import Index from "./pages/Index";
-import FinancialStatementsPage from "./pages/FinancialStatementsPage";
-import MappingPage from "./pages/MappingPage";
-import DataPage from "./pages/DataPage";
-import UploadPage from "./pages/UploadPage";
-import ChatPage from "./pages/ChatPage";
-import NotFound from "./pages/NotFound";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { SidebarProvider } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/AppSidebar';
+import { Toaster } from '@/components/ui/toaster';
+import { FinancialDataProvider } from '@/contexts/FinancialDataContext';
+import Index from '@/pages/Index';
+import UploadPage from '@/pages/UploadPage';
+import MappingPage from '@/pages/MappingPage';
+import FinancialStatementsPage from '@/pages/FinancialStatementsPage';
+import DataPage from '@/pages/DataPage';
+import ChatPage from '@/pages/ChatPage';
+import NotFound from '@/pages/NotFound';
 
-const queryClient = new QueryClient();
-
-const App = () => (
-  <QueryClientProvider client={queryClient}>
+function App() {
+  return (
     <FinancialDataProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <SidebarProvider>
-            <div className="min-h-screen flex w-full bg-background">
-              <AppSidebar />
-              <main className="flex-1 p-6 overflow-auto">
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/statements" element={<FinancialStatementsPage />} />
-                  <Route path="/mapping" element={<MappingPage />} />
-                  <Route path="/data" element={<DataPage />} />
-                  <Route path="/upload" element={<UploadPage />} />
-                  <Route path="/chat" element={<ChatPage />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </main>
-            </div>
-          </SidebarProvider>
-        </BrowserRouter>
-      </TooltipProvider>
+      <Router>
+        <SidebarProvider>
+          <div className="flex min-h-screen w-full">
+            <AppSidebar />
+            <main className="flex-1 p-6 overflow-auto">
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/upload" element={<UploadPage />} />
+                <Route path="/mapping" element={<MappingPage />} />
+                <Route path="/statements" element={<FinancialStatementsPage />} />
+                <Route path="/data" element={<DataPage />} />
+                <Route path="/chat" element={<ChatPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </main>
+          </div>
+          <Toaster />
+        </SidebarProvider>
+      </Router>
     </FinancialDataProvider>
-  </QueryClientProvider>
-);
+  );
+}
 
 export default App;
