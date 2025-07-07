@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { FileSelector } from '@/components/FileSelector';
 import { ifrsCategories } from '@/data/mockData';
 import { FinancialEntry } from '@/types/financial';
 import { Edit, Save, X } from 'lucide-react';
@@ -14,8 +15,8 @@ import { ReconciliationService } from '@/services/reconciliationService';
 import React from 'react';
 
 export function DataMapping() {
-  const { financialData, setFinancialData } = useFinancialData();
-  const [entries, setEntries] = useState<FinancialEntry[]>(financialData.entries);
+  const { currentFinancialData, updateFileData, selectedFileId } = useFinancialData();
+  const [entries, setEntries] = useState<FinancialEntry[]>(currentFinancialData.entries);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempCategory, setTempCategory] = useState<string>('');
   const [reconciliationResults, setReconciliationResults] = useState<ReconciliationResult[]>([]);
@@ -41,7 +42,12 @@ export function DataMapping() {
         : entry
     );
     setEntries(updatedEntries);
-    setFinancialData({ ...financialData, entries: updatedEntries });
+    
+    // Update the context with new data
+    if (selectedFileId) {
+      updateFileData(selectedFileId, { ...currentFinancialData, entries: updatedEntries });
+    }
+    
     setEditingId(null);
     setTempCategory('');
   };
@@ -234,6 +240,8 @@ export function DataMapping() {
         <h1 className="text-3xl font-bold text-foreground">IFRS Mapping</h1>
         <p className="text-muted-foreground">Review and adjust account classifications with validation</p>
       </div>
+
+      <FileSelector />
 
       <Tabs defaultValue="balance-sheet" className="w-full">
         <TabsList className="grid w-full grid-cols-2">

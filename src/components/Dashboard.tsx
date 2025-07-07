@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { FileSelector } from '@/components/FileSelector';
 import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
 
 export function Dashboard() {
-  const { financialData } = useFinancialData();
-  const { entries, companyName, reportPeriod } = financialData;
+  const { currentFinancialData } = useFinancialData();
+  const { entries, companyName, reportPeriod } = currentFinancialData;
 
   // Calculate key metrics
   const totalAssets = entries
@@ -39,6 +40,8 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <FileSelector />
+      
       <div>
         <h1 className="text-3xl font-bold text-foreground">{companyName}</h1>
         <p className="text-muted-foreground">{reportPeriod}</p>

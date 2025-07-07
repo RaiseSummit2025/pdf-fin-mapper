@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { FileSelector } from '@/components/FileSelector';
 import { FinancialEntry } from '@/types/financial';
 import { financialDataToCSV } from '@/lib/csv';
 import { Search, Download, Filter } from 'lucide-react';
 
 export function UnderlyingData() {
-  const { financialData } = useFinancialData();
-  const [entries] = useState<FinancialEntry[]>(financialData.entries);
+  const { currentFinancialData } = useFinancialData();
+  const [entries] = useState<FinancialEntry[]>(currentFinancialData.entries);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<keyof FinancialEntry>('description');
@@ -102,6 +103,8 @@ export function UnderlyingData() {
         <h1 className="text-3xl font-bold text-foreground">Underlying Data</h1>
         <p className="text-muted-foreground">Complete flat file with all extracted and mapped financial data</p>
       </div>
+
+      <FileSelector />
 
       <Card>
         <CardHeader>

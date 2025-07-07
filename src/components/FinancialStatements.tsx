@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
+import { FileSelector } from '@/components/FileSelector';
 
 export function FinancialStatements() {
-  const { financialData } = useFinancialData();
-  const { entries, companyName, reportPeriod } = financialData;
+  const { currentFinancialData } = useFinancialData();
+  const { entries, companyName, reportPeriod } = currentFinancialData;
   
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-US', { 
@@ -58,6 +59,8 @@ export function FinancialStatements() {
         <h1 className="text-3xl font-bold text-foreground">Financial Statements</h1>
         <p className="text-muted-foreground">{companyName} - {reportPeriod}</p>
       </div>
+
+      <FileSelector />
 
       <Tabs defaultValue="balance-sheet" className="w-full">
         <TabsList className="grid w-full grid-cols-3">

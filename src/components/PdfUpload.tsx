@@ -8,6 +8,7 @@ import { Upload, FileText, CheckCircle, AlertCircle, Loader2, ArrowRight, GripVe
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FinancialEntry, FinancialData } from '@/types/financial';
+import { FileSelector } from '@/components/FileSelector';
 import {
   DndContext,
   closestCenter,
@@ -257,7 +258,7 @@ export function PdfUpload() {
   const [mappedData, setMappedData] = useState<FinancialData | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { setFinancialData, setIsProcessedData, financialData } = useFinancialData();
+  const { addFile, currentFinancialData, updateFileData, selectedFileId } = useFinancialData();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -334,15 +335,20 @@ export function PdfUpload() {
         if (parsedData) {
           console.log('Successfully parsed PDF data:', parsedData);
           setMappedData(parsedData);
-          setFinancialData(parsedData);
-          setIsProcessedData(true);
+          
+          // Create new file entry
+          const newFileData = {
+            id: `file-${Date.now()}`,
+            filename: uploadedFile?.name || 'Unknown File',
+            uploadDate: new Date().toISOString(),
+            data: parsedData
+          };
+          
+          addFile(newFileData);
         } else {
-          // Fallback to existing financial data
-          console.log('Using fallback financial data');
-          const currentData = { ...financialData };
-          setMappedData(currentData);
-          setFinancialData(currentData);
-          setIsProcessedData(true);
+          // Fallback to current financial data
+          console.log('Using current financial data');
+          setMappedData(currentFinancialData);
         }
       }
       
@@ -399,7 +405,7 @@ export function PdfUpload() {
 
       const updatedData = { ...mappedData, entries: updatedEntries };
       setMappedData(updatedData);
-      setFinancialData(updatedData);
+      updateFileData(selectedFileId, updatedData);
 
       toast({
         title: "Item Remapped",
@@ -433,7 +439,7 @@ export function PdfUpload() {
 
       const updatedData = { ...mappedData, entries: updatedEntries };
       setMappedData(updatedData);
-      setFinancialData(updatedData);
+      updateFileData(selectedFileId, updatedData);
 
       toast({
         title: "Items Swapped",
@@ -780,6 +786,8 @@ export function PdfUpload() {
         <h1 className="text-3xl font-bold text-foreground">Upload PDF Report</h1>
         <p className="text-muted-foreground">Upload financial statements in PDF format for automated extraction and analysis</p>
       </div>
+
+      <FileSelector />
 
       {showMappingEngine && <MappingEngine />}
 
