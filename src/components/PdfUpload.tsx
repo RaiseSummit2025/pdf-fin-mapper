@@ -1,4 +1,9 @@
 import { useState, useRef } from 'react';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
+
+// Configure the worker source for pdf.js
+GlobalWorkerOptions.workerSrc = pdfWorker;
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -113,12 +118,75 @@ const IFRS_MAPPING_DICTIONARY: Record<string, { ifrsCategory: string; highLevelC
   'interest expense': { ifrsCategory: 'Finance Costs', highLevelCategory: 'Expenses', mainGrouping: 'Financial Costs' },
 };
 
-// Simulate real PDF parsing - this would be replaced with actual PDF parsing logic
-const parseActualPDFData = (fileName: string): FinancialData | null => {
-  // This is a placeholder - in real implementation, this would parse the actual PDF file
-  // For now, return null to show "no data" state when no actual parsing is implemented
-  console.log('Attempting to parse PDF:', fileName);
-  return null;
+// Parse a single line of text into a description and numeric amount
+// Supports values like "1,234.00", "$1,234.00" and "(1,234.00)"
+const parseLine = (line: string): { description: string; amount: number } | null => {
+  const match = line.match(/^(.+?)\s+[\($]?\$?(-?[\d,]+(?:\.\d+)?)\)?$/);
+  if (!match) return null;
+  const [, desc, amountStr] = match;
+  const numeric = amountStr.replace(/[\$,()]/g, '');
+  const amount = parseFloat(numeric) * (amountStr.includes('(') ? -1 : 1);
+  if (isNaN(amount)) return null;
+  return { description: desc.trim(), amount };
+};
+
+// Parse a PDF using pdf.js and attempt to map "Description Amount" lines into
+// structured financial data. If nothing is recognised `null` is returned so the
+// application can fall back to example data.
+const parseActualPDFData = async (file: File): Promise<FinancialData | null> => {
+  try {
+    console.log('Attempting to parse PDF:', file.name);
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await getDocument({ data: arrayBuffer }).promise;
+
+    let text = '';
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      text +=
+        content.items
+          .map(item => ('str' in item ? (item as any).str : ''))
+          .join(' ') +
+        '\n';
+    }
+
+    const lines = text
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    const entries: FinancialEntry[] = [];
+
+    lines.forEach((line, index) => {
+      const parsed = parseLine(line);
+      if (!parsed) return;
+      const { description, amount } = parsed;
+      const mapping = mapDescriptionToIFRS(description);
+
+      entries.push({
+        id: String(index + 1),
+        date: new Date().toISOString().slice(0, 10),
+        description,
+        amount,
+        highLevelCategory: mapping.highLevelCategory,
+        mainGrouping: mapping.mainGrouping,
+        ifrsCategory: mapping.ifrsCategory,
+        originalLine: line
+      });
+    });
+
+    if (entries.length === 0) return null;
+
+    return {
+      companyName: file.name,
+      reportPeriod: '',
+      entries,
+      lastUpdated: new Date().toISOString()
+    };
+  } catch (err) {
+    console.error('Failed to parse uploaded file', err);
+    return null;
+  }
 };
 
 const mapDescriptionToIFRS = (description: string) => {
@@ -269,7 +337,7 @@ export function PdfUpload() {
       
       if (i === 1) { // IFRS Mapping step
         // Try to parse actual PDF data
-        const parsedData = parseActualPDFData(uploadedFile?.name || '');
+        const parsedData = uploadedFile ? await parseActualPDFData(uploadedFile) : null;
         
         if (parsedData) {
           setMappedData(parsedData);
