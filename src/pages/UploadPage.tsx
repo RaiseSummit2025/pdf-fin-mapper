@@ -1,6 +1,6 @@
 
 import { PdfUpload } from '@/components/PdfUpload';
-import ExcelProcessor from '@/components/ExcelProcessor';
+import { ExcelProcessor } from '@/components/ExcelProcessor';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Zap } from 'lucide-react';
 
