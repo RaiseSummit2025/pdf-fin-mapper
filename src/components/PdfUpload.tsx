@@ -262,7 +262,7 @@ export function PdfUpload() {
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { addFile, currentFinancialData, updateFileData, selectedFileId } = useFinancialData();
+  const { currentFinancialData, updateFileData, selectedFileId, setSelectedFile } = useFinancialData();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfService = new SupabasePdfService();
 
@@ -336,13 +336,8 @@ export function PdfUpload() {
         const extractedData = await pdfService.getExtractedData(currentUploadId);
         if (extractedData) {
           setMappedData(extractedData);
-          const newFileData = {
-            id: currentUploadId,
-            filename: uploadedFile?.name || 'Unknown',
-            uploadDate: new Date().toISOString(),
-            data: extractedData
-          };
-          addFile(newFileData);
+          // Use setSelectedFile instead of addFile
+          setSelectedFile(currentUploadId, extractedData);
           setShowMappingEngine(true);
           setProgress(100);
           setSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
@@ -375,7 +370,7 @@ export function PdfUpload() {
 
     const interval = setInterval(pollStatus, 2000); // Poll every 2 seconds
     return () => clearInterval(interval);
-  }, [currentUploadId, isProcessing, uploadedFile?.name, pdfService, addFile, toast]);
+  }, [currentUploadId, isProcessing, uploadedFile?.name, pdfService, setSelectedFile, toast]);
 
   const processStructuredPDF = async () => {
     if (!uploadedFile) return;
