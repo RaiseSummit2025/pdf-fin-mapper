@@ -14,6 +14,78 @@ export type Database = {
   }
   public: {
     Tables: {
+      excel_data: {
+        Row: {
+          cell_value: string | null
+          column_name: string | null
+          created_at: string
+          data_type: string | null
+          id: string
+          row_number: number
+          sheet_name: string
+          upload_id: string
+        }
+        Insert: {
+          cell_value?: string | null
+          column_name?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          row_number: number
+          sheet_name: string
+          upload_id: string
+        }
+        Update: {
+          cell_value?: string | null
+          column_name?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          row_number?: number
+          sheet_name?: string
+          upload_id?: string
+        }
+        Relationships: []
+      }
+      excel_uploads: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          file_size: number | null
+          filename: string
+          id: string
+          processing_status: string | null
+          sheets_count: number | null
+          storage_path: string | null
+          total_records_count: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_size?: number | null
+          filename: string
+          id?: string
+          processing_status?: string | null
+          sheets_count?: number | null
+          storage_path?: string | null
+          total_records_count?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_size?: number | null
+          filename?: string
+          id?: string
+          processing_status?: string | null
+          sheets_count?: number | null
+          storage_path?: string | null
+          total_records_count?: number | null
+        }
+        Relationships: []
+      }
       pdf_uploads: {
         Row: {
           completed_at: string | null
