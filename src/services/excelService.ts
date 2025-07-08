@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExcelUploadResult {
@@ -94,20 +93,25 @@ class ExcelService {
         })
         .eq('id', upload.id);
 
-      // Process the Excel file using edge function with timeout
+      // Process the Excel file using edge function with timeout handling
       console.log('Invoking process-excel function...');
       
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      try {
-        const { data: processResult, error: processError } = await supabase.functions
-          .invoke('process-excel', {
-            body: { upload_id: upload.id },
-            signal: controller.signal
-          });
+      // Create a timeout promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Processing timeout - file may be too large or complex')), 30000);
+      });
 
-        clearTimeout(timeoutId);
+      // Create the function invoke promise
+      const invokePromise = supabase.functions.invoke('process-excel', {
+        body: { upload_id: upload.id }
+      });
+
+      try {
+        // Race between the function call and timeout
+        const { data: processResult, error: processError } = await Promise.race([
+          invokePromise,
+          timeoutPromise
+        ]) as any;
 
         if (processError) {
           console.error('Excel processing failed:', processError);
@@ -132,12 +136,9 @@ class ExcelService {
         };
 
       } catch (invokeError) {
-        clearTimeout(timeoutId);
-        
-        if (invokeError.name === 'AbortError') {
-          const timeoutError = 'Processing timeout - file may be too large or complex';
-          await this.updateUploadStatus(upload.id, 'failed', timeoutError);
-          throw new Error(timeoutError);
+        if (invokeError instanceof Error && invokeError.message.includes('timeout')) {
+          await this.updateUploadStatus(upload.id, 'failed', invokeError.message);
+          throw invokeError;
         }
         
         throw invokeError;
