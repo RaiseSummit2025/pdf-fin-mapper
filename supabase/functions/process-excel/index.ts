@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import * as XLSX from 'https://cdn.skypack.dev/xlsx@0.18.5';
@@ -27,10 +28,13 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let upload_id: string | undefined;
+  
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const { upload_id } = await req.json();
+    const requestBody = await req.json();
+    upload_id = requestBody.upload_id;
     
     if (!upload_id) {
       throw new Error('Upload ID is required');
@@ -166,12 +170,9 @@ serve(async (req) => {
   } catch (error) {
     console.error('Excel processing error:', error);
     
-    // Try to get upload_id from request for error updating
-    try {
-      const body = await req.json();
-      const { upload_id } = body;
-      
-      if (upload_id) {
+    // Update upload status to failed if we have an upload_id
+    if (upload_id) {
+      try {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         await supabase
           .from('excel_uploads')
@@ -181,9 +182,9 @@ serve(async (req) => {
             completed_at: new Date().toISOString()
           })
           .eq('id', upload_id);
+      } catch (updateError) {
+        console.error('Error updating upload status:', updateError);
       }
-    } catch (updateError) {
-      console.error('Error updating upload status:', updateError);
     }
 
     return new Response(
