@@ -24,6 +24,7 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -31,16 +32,18 @@ serve(async (req) => {
   let upload_id: string | undefined;
   
   try {
+    console.log('Processing Excel request...');
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     const requestBody = await req.json();
     upload_id = requestBody.upload_id;
     
+    console.log('Processing upload ID:', upload_id);
+    
     if (!upload_id) {
       throw new Error('Upload ID is required');
     }
-
-    console.log('Processing Excel upload:', upload_id);
 
     // Get upload record
     const { data: upload, error: uploadError } = await supabase
@@ -53,6 +56,8 @@ serve(async (req) => {
       console.error('Upload not found:', uploadError);
       throw new Error('Upload not found');
     }
+
+    console.log('Found upload record:', upload.filename);
 
     // Update status to processing
     await supabase
@@ -70,7 +75,7 @@ serve(async (req) => {
       throw new Error('Failed to download Excel file');
     }
 
-    console.log('Downloaded file:', upload.filename, 'Size:', fileData.size);
+    console.log('Downloaded file successfully, size:', fileData.size);
 
     // Convert file to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
@@ -95,24 +100,32 @@ serve(async (req) => {
       // Store raw data in excel_data table
       for (let i = 0; i < jsonData.length; i++) {
         const rowData = jsonData[i] as any[];
-        if (rowData && rowData.length > 0) {
-          await supabase
-            .from('excel_data')
-            .insert({
-              upload_id: upload_id,
-              sheet_name: sheetName,
-              row_number: i + 1,
-              column_name: 'row_data',
-              cell_value: JSON.stringify(rowData),
-              data_type: 'array'
-            });
-          totalRecords++;
+        if (rowData && rowData.length > 0 && rowData.some(cell => cell !== null && cell !== undefined && cell !== '')) {
+          try {
+            await supabase
+              .from('excel_data')
+              .insert({
+                upload_id: upload_id,
+                sheet_name: sheetName,
+                row_number: i + 1,
+                column_name: 'row_data',
+                cell_value: JSON.stringify(rowData),
+                data_type: 'array'
+              });
+            totalRecords++;
+          } catch (insertError) {
+            console.error('Error inserting row data:', insertError);
+          }
         }
       }
       
       // Try to extract financial data
-      const sheetFinancials = extractFinancialData(jsonData, sheetName, upload.filename);
-      financialEntries.push(...sheetFinancials);
+      try {
+        const sheetFinancials = extractFinancialData(jsonData, sheetName, upload.filename);
+        financialEntries.push(...sheetFinancials);
+      } catch (extractError) {
+        console.error('Error extracting financial data from sheet:', sheetName, extractError);
+      }
     }
 
     console.log('Extracted financial entries:', financialEntries.length);
@@ -127,20 +140,24 @@ serve(async (req) => {
         credit: entry.credit || null,
         balance: entry.balance,
         period: entry.period || null,
-        page_number: null, // Excel doesn't have pages
+        page_number: null,
         confidence_score: entry.confidence_score || 0.8
       }));
 
-      const { error: insertError } = await supabase
-        .from('trial_balances')
-        .insert(trialBalanceRecords);
+      try {
+        const { error: insertError } = await supabase
+          .from('trial_balances')
+          .insert(trialBalanceRecords);
 
-      if (insertError) {
-        console.error('Failed to insert trial balance records:', insertError);
-        throw new Error(`Failed to insert trial balance records: ${insertError.message}`);
+        if (insertError) {
+          console.error('Failed to insert trial balance records:', insertError);
+          throw new Error(`Failed to insert trial balance records: ${insertError.message}`);
+        }
+
+        console.log('Inserted trial balance records:', trialBalanceRecords.length);
+      } catch (insertError) {
+        console.error('Error inserting trial balance records:', insertError);
       }
-
-      console.log('Inserted trial balance records:', trialBalanceRecords.length);
     }
 
     // Update upload status to completed
@@ -164,7 +181,12 @@ serve(async (req) => {
         financial_entries_count: financialEntries.length,
         message: 'Excel file processed successfully'
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        } 
+      }
     );
 
   } catch (error) {
@@ -194,15 +216,21 @@ serve(async (req) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json' 
+        }
       }
     );
   }
 });
 
-// Helper function to extract financial data from Excel rows
 function extractFinancialData(rows: any[][], sheetName: string, filename: string): FinancialEntry[] {
   const entries: FinancialEntry[] = [];
+  
+  if (!rows || rows.length === 0) {
+    return entries;
+  }
   
   // Skip first few rows that might be headers
   let dataStartRow = 0;
@@ -225,9 +253,13 @@ function extractFinancialData(rows: any[][], sheetName: string, filename: string
     const row = rows[i];
     if (!row || row.length < 2) continue;
 
-    const entry = parseExcelRow(row, sheetName, i + 1, filename);
-    if (entry) {
-      entries.push(entry);
+    try {
+      const entry = parseExcelRow(row, sheetName, i + 1, filename);
+      if (entry) {
+        entries.push(entry);
+      }
+    } catch (parseError) {
+      console.error(`Error parsing row ${i + 1} in sheet ${sheetName}:`, parseError);
     }
   }
 
@@ -236,8 +268,10 @@ function extractFinancialData(rows: any[][], sheetName: string, filename: string
 }
 
 function parseExcelRow(row: any[], sheetName: string, rowNumber: number, filename: string): FinancialEntry | null {
-  // Try to detect different Excel formats
-  
+  if (!row || row.length === 0) {
+    return null;
+  }
+
   // Format 1: Account Number | Description | Balance
   if (row.length >= 3) {
     const accountNum = String(row[0] || '').trim();

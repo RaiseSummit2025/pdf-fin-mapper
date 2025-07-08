@@ -33,6 +33,23 @@ class ExcelService {
         throw new Error('File size too large. Maximum allowed size is 100MB.');
       }
 
+      // Validate file type
+      const validTypes = [
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/vnd.ms-excel',
+        'text/csv',
+        'application/csv'
+      ];
+      
+      const isValidType = validTypes.includes(file.type) || 
+                         file.name.toLowerCase().endsWith('.xlsx') || 
+                         file.name.toLowerCase().endsWith('.xls') || 
+                         file.name.toLowerCase().endsWith('.csv');
+      
+      if (!isValidType) {
+        throw new Error('Invalid file type. Please select an Excel (.xlsx, .xls) or CSV file.');
+      }
+
       // Create upload record
       const { data: upload, error: uploadError } = await supabase
         .from('excel_uploads')
@@ -77,34 +94,54 @@ class ExcelService {
         })
         .eq('id', upload.id);
 
-      // Process the Excel file using edge function
+      // Process the Excel file using edge function with timeout
       console.log('Invoking process-excel function...');
-      const { data: processResult, error: processError } = await supabase.functions
-        .invoke('process-excel', {
-          body: { upload_id: upload.id }
-        });
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      try {
+        const { data: processResult, error: processError } = await supabase.functions
+          .invoke('process-excel', {
+            body: { upload_id: upload.id },
+            signal: controller.signal
+          });
 
-      if (processError) {
-        console.error('Excel processing failed:', processError);
-        await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${processError.message}`);
-        throw new Error(`Excel processing failed: ${processError.message}`);
+        clearTimeout(timeoutId);
+
+        if (processError) {
+          console.error('Excel processing failed:', processError);
+          await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${processError.message}`);
+          throw new Error(`Excel processing failed: ${processError.message}`);
+        }
+
+        console.log('Excel processing completed:', processResult);
+
+        // Check if the processing was successful
+        if (!processResult || !processResult.success) {
+          const errorMsg = processResult?.error || 'Processing failed - no response from server';
+          await this.updateUploadStatus(upload.id, 'failed', errorMsg);
+          throw new Error(errorMsg);
+        }
+
+        return {
+          success: true,
+          records_count: processResult.total_records_count || 0,
+          sheets_count: processResult.sheets_count || 0,
+          upload_id: upload.id
+        };
+
+      } catch (invokeError) {
+        clearTimeout(timeoutId);
+        
+        if (invokeError.name === 'AbortError') {
+          const timeoutError = 'Processing timeout - file may be too large or complex';
+          await this.updateUploadStatus(upload.id, 'failed', timeoutError);
+          throw new Error(timeoutError);
+        }
+        
+        throw invokeError;
       }
-
-      console.log('Excel processing completed:', processResult);
-
-      // Check if the processing was successful
-      if (!processResult?.success) {
-        const errorMsg = processResult?.error || 'Processing failed';
-        await this.updateUploadStatus(upload.id, 'failed', errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      return {
-        success: true,
-        records_count: processResult?.total_records_count || 0,
-        sheets_count: processResult?.sheets_count || 0,
-        upload_id: upload.id
-      };
 
     } catch (error) {
       console.error('Excel upload error:', error);
