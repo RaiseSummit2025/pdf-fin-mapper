@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExcelUploadResult {
@@ -104,20 +105,34 @@ class ExcelService {
       console.log('Processing Excel file with upload_id:', upload.id);
       
       try {
+        // Add timeout and better error handling for the function call
+        console.log('Invoking process-excel function...');
+        
         const { data, error } = await supabase.functions.invoke('process-excel', {
-          body: { upload_id: upload.id }
+          body: { upload_id: upload.id },
+          headers: {
+            'Content-Type': 'application/json',
+          }
         });
 
-        console.log('Function response:', data);
+        console.log('Function invocation completed');
+        console.log('Function response data:', data);
+        console.log('Function response error:', error);
         
         if (error) {
           console.error('Function invocation error:', error);
-          throw new Error(`Processing failed: ${error.message}`);
+          throw new Error(`Edge function error: ${error.message || JSON.stringify(error)}`);
         }
 
         // Check if the processing was successful
-        if (!data || !data.success) {
-          const errorMsg = data?.error || 'Processing failed - no response from server';
+        if (!data) {
+          console.error('No data returned from function');
+          await this.updateUploadStatus(upload.id, 'failed', 'No response from processing function');
+          throw new Error('No response received from processing function');
+        }
+
+        if (!data.success) {
+          const errorMsg = data.error || 'Processing failed - function returned unsuccessful result';
           console.error('Processing failed:', errorMsg);
           await this.updateUploadStatus(upload.id, 'failed', errorMsg);
           throw new Error(errorMsg);
@@ -133,8 +148,9 @@ class ExcelService {
 
       } catch (functionError) {
         console.error('Function processing error:', functionError);
-        await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${functionError.message}`);
-        throw new Error(`Processing failed: ${functionError.message}`);
+        const errorMessage = functionError instanceof Error ? functionError.message : 'Unknown function error';
+        await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${errorMessage}`);
+        throw new Error(`Processing failed: ${errorMessage}`);
       }
 
     } catch (error) {
