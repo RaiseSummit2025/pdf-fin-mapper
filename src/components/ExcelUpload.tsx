@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, File } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, FileText, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { excelService } from '@/services/excelService';
 
@@ -14,6 +14,7 @@ interface UploadStatus {
   error: string | null;
   success: boolean;
   fileName?: string;
+  fileSize?: number;
 }
 
 export const ExcelUpload = () => {
@@ -26,6 +27,14 @@ export const ExcelUpload = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   const handleFileSelect = async (file: File) => {
     if (!file) return;
 
@@ -37,7 +46,8 @@ export const ExcelUpload = () => {
       progress: 10,
       error: null,
       success: false,
-      fileName: file.name
+      fileName: file.name,
+      fileSize: file.size
     });
 
     try {
@@ -54,7 +64,8 @@ export const ExcelUpload = () => {
           progress: 100,
           error: null,
           success: true,
-          fileName: file.name
+          fileName: file.name,
+          fileSize: file.size
         });
 
         toast({
@@ -71,7 +82,8 @@ export const ExcelUpload = () => {
         progress: 0,
         error: error instanceof Error ? error.message : 'Upload failed',
         success: false,
-        fileName: file.name
+        fileName: file.name,
+        fileSize: file.size
       });
 
       toast({
@@ -138,7 +150,7 @@ export const ExcelUpload = () => {
             Upload Excel files (.xlsx, .xls) or CSV files to extract financial data and trial balances
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
           <input
             ref={fileInputRef}
             type="file"
@@ -147,10 +159,11 @@ export const ExcelUpload = () => {
             className="hidden"
           />
           
+          {/* Upload Area */}
           <div
             onClick={handleUploadClick}
             className={`
-              border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 cursor-pointer
+              relative border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 cursor-pointer
               ${uploadStatus.isUploading 
                 ? 'border-muted-foreground/50 bg-muted/20 cursor-not-allowed' 
                 : uploadStatus.success 
@@ -179,32 +192,17 @@ export const ExcelUpload = () => {
                 {uploadStatus.isUploading ? (
                   <div>
                     <p className="text-lg font-medium text-foreground">Processing Excel file...</p>
-                    {uploadStatus.fileName && (
-                      <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-                        <File className="w-4 h-4" />
-                        {uploadStatus.fileName}
-                      </p>
-                    )}
+                    <p className="text-sm text-muted-foreground">Extracting and analyzing data</p>
                   </div>
                 ) : uploadStatus.success ? (
                   <div>
                     <p className="text-lg font-medium text-green-700">Upload completed successfully!</p>
-                    {uploadStatus.fileName && (
-                      <p className="text-sm text-green-600 flex items-center justify-center gap-2">
-                        <File className="w-4 h-4" />
-                        {uploadStatus.fileName}
-                      </p>
-                    )}
+                    <p className="text-sm text-green-600">File processed and data extracted</p>
                   </div>
                 ) : uploadStatus.error ? (
                   <div>
                     <p className="text-lg font-medium text-red-700">Upload failed</p>
-                    {uploadStatus.fileName && (
-                      <p className="text-sm text-red-600 flex items-center justify-center gap-2">
-                        <File className="w-4 w-4" />
-                        {uploadStatus.fileName}
-                      </p>
-                    )}
+                    <p className="text-sm text-red-600">Please try again or contact support</p>
                   </div>
                 ) : (
                   <div>
@@ -220,35 +218,62 @@ export const ExcelUpload = () => {
             </div>
           </div>
 
+          {/* File Information */}
+          {uploadStatus.fileName && (
+            <div className="bg-muted/50 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {uploadStatus.fileName}
+                  </p>
+                  {uploadStatus.fileSize && (
+                    <p className="text-xs text-muted-foreground">
+                      {formatFileSize(uploadStatus.fileSize)}
+                    </p>
+                  )}
+                </div>
+                {uploadStatus.success && (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                )}
+                {uploadStatus.error && (
+                  <XCircle className="w-5 h-5 text-red-600" />
+                )}
+                {uploadStatus.isUploading && (
+                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Progress Bar */}
           {uploadStatus.isUploading && (
-            <div className="mt-6 space-y-2">
+            <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Upload Progress</span>
                 <span className="font-medium">{uploadStatus.progress}%</span>
               </div>
               <Progress value={uploadStatus.progress} className="w-full" />
-              <p className="text-xs text-muted-foreground text-center">
-                Uploading and extracting financial data...
-              </p>
             </div>
           )}
 
+          {/* Error Alert */}
           {uploadStatus.error && (
-            <Alert className="mt-6" variant="destructive">
-              <XCircle className="h-4 w-4" />
-              <AlertDescription className="ml-2">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
                 <strong>Error:</strong> {uploadStatus.error}
               </AlertDescription>
             </Alert>
           )}
 
+          {/* Success Alert and Actions */}
           {uploadStatus.success && (
-            <div className="mt-6 space-y-4">
+            <div className="space-y-4">
               <Alert className="border-green-200 bg-green-50">
                 <CheckCircle className="h-4 w-4 text-green-600" />
-                <AlertDescription className="ml-2 text-green-800">
+                <AlertDescription className="text-green-800">
                   <strong>Success!</strong> Your Excel file has been processed and the data is now available for analysis.
-                  You can view the extracted data in the Data section.
                 </AlertDescription>
               </Alert>
               
@@ -269,6 +294,22 @@ export const ExcelUpload = () => {
               </div>
             </div>
           )}
+
+          {/* File Format Information */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <FileSpreadsheet className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <h4 className="font-medium text-blue-900 mb-1">Supported File Formats</h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• Excel files (.xlsx, .xls)</li>
+                  <li>• CSV files (.csv)</li>
+                  <li>• Maximum file size: 100MB</li>
+                  <li>• Multiple sheets supported</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

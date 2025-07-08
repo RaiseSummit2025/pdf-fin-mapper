@@ -96,31 +96,40 @@ class ExcelService {
       // Process the Excel file using edge function
       console.log('Invoking process-excel function...');
       
-      const { data: processResult, error: processError } = await supabase.functions.invoke('process-excel', {
-        body: { upload_id: upload.id }
-      });
+      try {
+        const { data: processResult, error: processError } = await supabase.functions.invoke('process-excel', {
+          body: { upload_id: upload.id }
+        });
 
-      if (processError) {
-        console.error('Excel processing failed:', processError);
-        await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${processError.message}`);
-        throw new Error(`Excel processing failed: ${processError.message}`);
+        if (processError) {
+          console.error('Excel processing failed:', processError);
+          await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${processError.message}`);
+          throw new Error(`Excel processing failed: ${processError.message}`);
+        }
+
+        console.log('Excel processing completed:', processResult);
+
+        // Check if the processing was successful
+        if (!processResult || !processResult.success) {
+          const errorMsg = processResult?.error || 'Processing failed - no response from server';
+          await this.updateUploadStatus(upload.id, 'failed', errorMsg);
+          throw new Error(errorMsg);
+        }
+
+        await this.updateUploadStatus(upload.id, 'completed');
+
+        return {
+          success: true,
+          records_count: processResult.total_records_count || 0,
+          sheets_count: processResult.sheets_count || 0,
+          upload_id: upload.id
+        };
+
+      } catch (functionError) {
+        console.error('Function invocation error:', functionError);
+        await this.updateUploadStatus(upload.id, 'failed', `Function error: ${functionError.message}`);
+        throw new Error(`Processing failed: ${functionError.message}`);
       }
-
-      console.log('Excel processing completed:', processResult);
-
-      // Check if the processing was successful
-      if (!processResult || !processResult.success) {
-        const errorMsg = processResult?.error || 'Processing failed - no response from server';
-        await this.updateUploadStatus(upload.id, 'failed', errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      return {
-        success: true,
-        records_count: processResult.total_records_count || 0,
-        sheets_count: processResult.sheets_count || 0,
-        upload_id: upload.id
-      };
 
     } catch (error) {
       console.error('Excel upload error:', error);
