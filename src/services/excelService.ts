@@ -101,18 +101,31 @@ class ExcelService {
         console.error('Failed to update storage path:', pathUpdateError);
       }
 
-      // Process the Excel file using the direct function URL
+      // Process the Excel file using the edge function
       console.log('Processing Excel file with upload_id:', upload.id);
       
       try {
+        // Get the session token for authorization
+        const { data: { session } } = await supabase.auth.getSession();
+        const authToken = session?.access_token;
+
         const functionUrl = 'https://eljikaqbumdqkrssudrm.supabase.co/functions/v1/process-excel';
+        
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+
+        // Add authorization header if we have a session
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
+        } else {
+          // Fallback to using the anon key from the client config
+          headers['Authorization'] = `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsamlrYXFidW1kcWtyc3N1ZHJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE2NjgzODMsImV4cCI6MjA2NzI0NDM4M30.NRze5UW2Sdi3ZLmoVaSEFRm2QG14LsDBRoQRwDj49aw`;
+        }
         
         const response = await fetch(functionUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabase.supabaseKey}`,
-          },
+          headers,
           body: JSON.stringify({ upload_id: upload.id })
         });
 
