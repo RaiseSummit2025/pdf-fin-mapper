@@ -14,7 +14,172 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      excel_data: {
+        Row: {
+          cell_value: string | null
+          column_name: string | null
+          created_at: string
+          data_type: string | null
+          id: string
+          row_number: number
+          sheet_name: string
+          upload_id: string | null
+        }
+        Insert: {
+          cell_value?: string | null
+          column_name?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          row_number: number
+          sheet_name: string
+          upload_id?: string | null
+        }
+        Update: {
+          cell_value?: string | null
+          column_name?: string | null
+          created_at?: string
+          data_type?: string | null
+          id?: string
+          row_number?: number
+          sheet_name?: string
+          upload_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "excel_data_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "excel_uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      excel_uploads: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          file_size: number | null
+          filename: string
+          id: string
+          processing_status: string | null
+          sheets_count: number | null
+          storage_path: string | null
+          total_records_count: number | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_size?: number | null
+          filename: string
+          id?: string
+          processing_status?: string | null
+          sheets_count?: number | null
+          storage_path?: string | null
+          total_records_count?: number | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          file_size?: number | null
+          filename?: string
+          id?: string
+          processing_status?: string | null
+          sheets_count?: number | null
+          storage_path?: string | null
+          total_records_count?: number | null
+        }
+        Relationships: []
+      }
+      pdf_uploads: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          extracted_records_count: number | null
+          file_size: number
+          filename: string
+          id: string
+          processing_status: string | null
+          storage_path: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          extracted_records_count?: number | null
+          file_size: number
+          filename: string
+          id?: string
+          processing_status?: string | null
+          storage_path: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          extracted_records_count?: number | null
+          file_size?: number
+          filename?: string
+          id?: string
+          processing_status?: string | null
+          storage_path?: string
+        }
+        Relationships: []
+      }
+      trial_balances: {
+        Row: {
+          account_description: string
+          account_number: string | null
+          balance: number
+          confidence_score: number | null
+          created_at: string
+          credit: number | null
+          debit: number | null
+          id: string
+          page_number: number | null
+          period: string | null
+          upload_id: string | null
+        }
+        Insert: {
+          account_description: string
+          account_number?: string | null
+          balance: number
+          confidence_score?: number | null
+          created_at?: string
+          credit?: number | null
+          debit?: number | null
+          id?: string
+          page_number?: number | null
+          period?: string | null
+          upload_id?: string | null
+        }
+        Update: {
+          account_description?: string
+          account_number?: string | null
+          balance?: number
+          confidence_score?: number | null
+          created_at?: string
+          credit?: number | null
+          debit?: number | null
+          id?: string
+          page_number?: number | null
+          period?: string | null
+          upload_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_balances_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "excel_uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
