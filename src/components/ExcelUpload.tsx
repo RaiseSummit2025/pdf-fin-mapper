@@ -1,9 +1,10 @@
+
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, File } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { excelService } from '@/services/excelService';
 
@@ -12,6 +13,7 @@ interface UploadStatus {
   progress: number;
   error: string | null;
   success: boolean;
+  fileName?: string;
 }
 
 export const ExcelUpload = () => {
@@ -27,33 +29,37 @@ export const ExcelUpload = () => {
   const handleFileSelect = async (file: File) => {
     if (!file) return;
 
+    console.log('Starting Excel file upload:', file.name, 'Size:', file.size);
+
     // Reset status
     setUploadStatus({
       isUploading: true,
-      progress: 0,
+      progress: 10,
       error: null,
-      success: false
+      success: false,
+      fileName: file.name
     });
 
     try {
-      // Simulate progress
-      setUploadStatus(prev => ({ ...prev, progress: 20 }));
+      // Upload progress simulation
+      setUploadStatus(prev => ({ ...prev, progress: 30 }));
 
       const result = await excelService.uploadExcelFile(file);
       
-      setUploadStatus(prev => ({ ...prev, progress: 60 }));
+      setUploadStatus(prev => ({ ...prev, progress: 80 }));
 
       if (result.success) {
         setUploadStatus({
           isUploading: false,
           progress: 100,
           error: null,
-          success: true
+          success: true,
+          fileName: file.name
         });
 
         toast({
           title: "Excel file uploaded successfully!",
-          description: `Processed ${result.records_count} records from ${result.sheets_count} sheets.`,
+          description: `Processed ${result.records_count || 0} records from ${result.sheets_count || 0} sheets.`,
         });
       } else {
         throw new Error(result.error || 'Upload failed');
@@ -64,7 +70,8 @@ export const ExcelUpload = () => {
         isUploading: false,
         progress: 0,
         error: error instanceof Error ? error.message : 'Upload failed',
-        success: false
+        success: false,
+        fileName: file.name
       });
 
       toast({
@@ -81,10 +88,16 @@ export const ExcelUpload = () => {
       const validTypes = [
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.ms-excel',
-        'text/csv'
+        'text/csv',
+        'application/csv'
       ];
       
-      if (validTypes.includes(file.type) || file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv')) {
+      const isValidType = validTypes.includes(file.type) || 
+                         file.name.toLowerCase().endsWith('.xlsx') || 
+                         file.name.toLowerCase().endsWith('.xls') || 
+                         file.name.toLowerCase().endsWith('.csv');
+      
+      if (isValidType) {
         handleFileSelect(file);
       } else {
         toast({
@@ -97,6 +110,7 @@ export const ExcelUpload = () => {
   };
 
   const handleUploadClick = () => {
+    if (uploadStatus.isUploading) return;
     fileInputRef.current?.click();
   };
 
@@ -107,6 +121,9 @@ export const ExcelUpload = () => {
       error: null,
       success: false
     });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -115,10 +132,10 @@ export const ExcelUpload = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5" />
-            Excel File Upload
+            Excel & CSV Upload
           </CardTitle>
           <CardDescription>
-            Upload Excel files (.xlsx, .xls) or CSV files to extract and analyze data
+            Upload Excel files (.xlsx, .xls) or CSV files to extract financial data and trial balances
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -129,74 +146,127 @@ export const ExcelUpload = () => {
             onChange={handleFileChange}
             className="hidden"
           />
+          
           <div
             onClick={handleUploadClick}
             className={`
-              border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors
-              border-gray-300 hover:border-gray-400
-              ${uploadStatus.isUploading ? 'pointer-events-none opacity-50' : ''}
+              border-2 border-dashed rounded-lg p-8 text-center transition-all duration-200 cursor-pointer
+              ${uploadStatus.isUploading 
+                ? 'border-muted-foreground/50 bg-muted/20 cursor-not-allowed' 
+                : uploadStatus.success 
+                ? 'border-green-500/50 bg-green-50 hover:bg-green-100' 
+                : uploadStatus.error 
+                ? 'border-red-500/50 bg-red-50 hover:bg-red-100' 
+                : 'border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-muted/10'
+              }
             `}
           >
             <div className="flex flex-col items-center gap-4">
               {uploadStatus.isUploading ? (
-                <Loader2 className="w-12 h-12 text-gray-400 animate-spin" />
+                <Loader2 className="w-12 h-12 text-primary animate-spin" />
               ) : uploadStatus.success ? (
-                <CheckCircle className="w-12 h-12 text-green-500" />
+                <CheckCircle className="w-12 h-12 text-green-600" />
               ) : uploadStatus.error ? (
-                <XCircle className="w-12 h-12 text-red-500" />
+                <XCircle className="w-12 h-12 text-red-600" />
               ) : (
-                <Upload className="w-12 h-12 text-gray-400" />
+                <div className="relative">
+                  <Upload className="w-12 h-12 text-muted-foreground" />
+                  <FileSpreadsheet className="w-6 h-6 text-primary absolute -bottom-1 -right-1" />
+                </div>
               )}
               
-              <div>
+              <div className="space-y-2">
                 {uploadStatus.isUploading ? (
-                  <p className="text-lg font-medium">Processing Excel file...</p>
+                  <div>
+                    <p className="text-lg font-medium text-foreground">Processing Excel file...</p>
+                    {uploadStatus.fileName && (
+                      <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                        <File className="w-4 h-4" />
+                        {uploadStatus.fileName}
+                      </p>
+                    )}
+                  </div>
                 ) : uploadStatus.success ? (
-                  <p className="text-lg font-medium text-green-600">File uploaded successfully!</p>
+                  <div>
+                    <p className="text-lg font-medium text-green-700">Upload completed successfully!</p>
+                    {uploadStatus.fileName && (
+                      <p className="text-sm text-green-600 flex items-center justify-center gap-2">
+                        <File className="w-4 h-4" />
+                        {uploadStatus.fileName}
+                      </p>
+                    )}
+                  </div>
                 ) : uploadStatus.error ? (
-                  <p className="text-lg font-medium text-red-600">Upload failed</p>
+                  <div>
+                    <p className="text-lg font-medium text-red-700">Upload failed</p>
+                    {uploadStatus.fileName && (
+                      <p className="text-sm text-red-600 flex items-center justify-center gap-2">
+                        <File className="w-4 w-4" />
+                        {uploadStatus.fileName}
+                      </p>
+                    )}
+                  </div>
                 ) : (
-                  <p className="text-lg font-medium">Click to select an Excel file</p>
-                )}
-                
-                {!uploadStatus.isUploading && !uploadStatus.success && !uploadStatus.error && (
-                  <p className="text-sm text-gray-500 mt-2">
-                    Supports .xlsx, .xls, and .csv files
-                  </p>
+                  <div>
+                    <p className="text-lg font-medium text-foreground">
+                      Drop your Excel file here or click to browse
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Supports .xlsx, .xls, and .csv files up to 100MB
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
           </div>
 
           {uploadStatus.isUploading && (
-            <div className="mt-4">
+            <div className="mt-6 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Upload Progress</span>
+                <span className="font-medium">{uploadStatus.progress}%</span>
+              </div>
               <Progress value={uploadStatus.progress} className="w-full" />
-              <p className="text-sm text-gray-500 mt-2">
-                Uploading and processing... {uploadStatus.progress}%
+              <p className="text-xs text-muted-foreground text-center">
+                Uploading and extracting financial data...
               </p>
             </div>
           )}
 
           {uploadStatus.error && (
-            <Alert className="mt-4" variant="destructive">
+            <Alert className="mt-6" variant="destructive">
               <XCircle className="h-4 w-4" />
-              <AlertDescription>
-                {uploadStatus.error}
+              <AlertDescription className="ml-2">
+                <strong>Error:</strong> {uploadStatus.error}
               </AlertDescription>
             </Alert>
           )}
 
           {uploadStatus.success && (
-            <div className="mt-4 space-y-2">
-              <Alert>
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Excel file processed successfully! You can now view the extracted data in the Data page.
+            <div className="mt-6 space-y-4">
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="ml-2 text-green-800">
+                  <strong>Success!</strong> Your Excel file has been processed and the data is now available for analysis.
+                  You can view the extracted data in the Data section.
                 </AlertDescription>
               </Alert>
-              <Button onClick={resetUpload} variant="outline" className="w-full">
-                Upload Another File
-              </Button>
+              
+              <div className="flex gap-3">
+                <Button 
+                  onClick={resetUpload} 
+                  variant="outline" 
+                  className="flex-1"
+                >
+                  Upload Another File
+                </Button>
+                <Button 
+                  onClick={() => window.location.href = '/data'} 
+                  className="flex-1"
+                >
+                  View Data
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

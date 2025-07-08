@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExcelUploadResult {
@@ -24,10 +25,16 @@ interface ExcelUpload {
 class ExcelService {
   async uploadExcelFile(file: File): Promise<ExcelUploadResult> {
     try {
-      console.log('Starting Excel file upload:', file.name);
+      console.log('Starting Excel file upload:', file.name, 'Size:', file.size);
+
+      // Validate file size (100MB limit)
+      const maxSize = 100 * 1024 * 1024; // 100MB
+      if (file.size > maxSize) {
+        throw new Error('File size too large. Maximum allowed size is 100MB.');
+      }
 
       // Create upload record
-      const { data: upload, error: uploadError } = await (supabase as any)
+      const { data: upload, error: uploadError } = await supabase
         .from('excel_uploads')
         .insert({
           filename: file.name,
@@ -35,11 +42,11 @@ class ExcelService {
           processing_status: 'uploading'
         })
         .select()
-        .single() as { data: ExcelUpload | null, error: any };
+        .single();
 
       if (uploadError || !upload) {
         console.error('Failed to create upload record:', uploadError);
-        throw new Error('Failed to create upload record');
+        throw new Error(`Failed to create upload record: ${uploadError?.message || 'Unknown error'}`);
       }
 
       console.log('Upload record created:', upload.id);
@@ -48,18 +55,21 @@ class ExcelService {
       const filePath = `${upload.id}/${file.name}`;
       const { error: storageError } = await supabase.storage
         .from('excel-uploads')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
       if (storageError) {
         console.error('File upload failed:', storageError);
-        await this.updateUploadStatus(upload.id, 'failed', storageError.message);
+        await this.updateUploadStatus(upload.id, 'failed', `Storage error: ${storageError.message}`);
         throw new Error(`File upload failed: ${storageError.message}`);
       }
 
       console.log('File uploaded to storage:', filePath);
 
       // Update upload record with storage path
-      await (supabase as any)
+      await supabase
         .from('excel_uploads')
         .update({
           storage_path: filePath,
@@ -67,7 +77,8 @@ class ExcelService {
         })
         .eq('id', upload.id);
 
-      // Process the Excel file
+      // Process the Excel file using edge function
+      console.log('Invoking process-excel function...');
       const { data: processResult, error: processError } = await supabase.functions
         .invoke('process-excel', {
           body: { upload_id: upload.id }
@@ -75,11 +86,18 @@ class ExcelService {
 
       if (processError) {
         console.error('Excel processing failed:', processError);
-        await this.updateUploadStatus(upload.id, 'failed', processError.message);
+        await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${processError.message}`);
         throw new Error(`Excel processing failed: ${processError.message}`);
       }
 
       console.log('Excel processing completed:', processResult);
+
+      // Check if the processing was successful
+      if (!processResult?.success) {
+        const errorMsg = processResult?.error || 'Processing failed';
+        await this.updateUploadStatus(upload.id, 'failed', errorMsg);
+        throw new Error(errorMsg);
+      }
 
       return {
         success: true,
@@ -98,43 +116,77 @@ class ExcelService {
   }
 
   private async updateUploadStatus(uploadId: string, status: string, errorMessage?: string) {
-    await (supabase as any)
-      .from('excel_uploads')
-      .update({
-        processing_status: status,
-        error_message: errorMessage,
-        completed_at: new Date().toISOString()
-      })
-      .eq('id', uploadId);
+    try {
+      await supabase
+        .from('excel_uploads')
+        .update({
+          processing_status: status,
+          error_message: errorMessage,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', uploadId);
+    } catch (error) {
+      console.error('Failed to update upload status:', error);
+    }
   }
 
   async getExcelUploads(): Promise<ExcelUpload[]> {
-    const { data, error } = await (supabase as any)
-      .from('excel_uploads')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('excel_uploads')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (error) {
+      if (error) {
+        console.error('Failed to fetch Excel uploads:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
       console.error('Failed to fetch Excel uploads:', error);
       return [];
     }
-
-    return data || [];
   }
 
   async getExcelData(uploadId: string) {
-    const { data, error } = await (supabase as any)
-      .from('excel_data')
-      .select('*')
-      .eq('upload_id', uploadId)
-      .order('row_number');
+    try {
+      const { data, error } = await supabase
+        .from('excel_data')
+        .select('*')
+        .eq('upload_id', uploadId)
+        .order('row_number');
 
-    if (error) {
+      if (error) {
+        console.error('Failed to fetch Excel data:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
       console.error('Failed to fetch Excel data:', error);
       return [];
     }
+  }
 
-    return data || [];
+  async getTrialBalances(uploadId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('trial_balances')
+        .select('*')
+        .eq('upload_id', uploadId)
+        .order('account_description');
+
+      if (error) {
+        console.error('Failed to fetch trial balances:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Failed to fetch trial balances:', error);
+      return [];
+    }
   }
 }
 
