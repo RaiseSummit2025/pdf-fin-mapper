@@ -1,5 +1,3 @@
-
-import pdfplumber from 'pdfplumber';
 import { FinancialEntry, FinancialData } from '@/types/financial';
 
 export interface RawFinancialEntry {
@@ -104,9 +102,9 @@ const mapDescriptionToIFRS = (description: string) => {
   };
 };
 
-// Extract structured data from PDF using pdfplumber
+// Extract structured data from PDF using pdfjs (temporary until Supabase backend)
 export const extractStructuredPDFData = async (file: File, debugMode: boolean = false): Promise<ExtractionResult> => {
-  console.log('Starting structured PDF extraction for:', file.name);
+  console.log('Starting basic PDF extraction for:', file.name);
   
   const result: ExtractionResult = {
     success: false,
@@ -117,16 +115,12 @@ export const extractStructuredPDFData = async (file: File, debugMode: boolean = 
   };
 
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    
-    // Note: pdfplumber is a Python library, so we'll use a hybrid approach
-    // For now, we'll enhance the existing pdfjs extraction with better parsing
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf');
     const worker = await import('pdfjs-dist/build/pdf.worker?worker');
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
 
-    const doc = await pdfjs.getDocument({ data: uint8Array }).promise;
+    const arrayBuffer = await file.arrayBuffer();
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
     
     let allText = '';
     const extractedTables: any[] = [];
@@ -135,7 +129,6 @@ export const extractStructuredPDFData = async (file: File, debugMode: boolean = 
       const page = await doc.getPage(pageNum);
       const textContent = await page.getTextContent();
       
-      // Extract text items with positioning
       const textItems = textContent.items.map((item: any) => ({
         text: item.str,
         x: item.transform[4],
@@ -144,7 +137,6 @@ export const extractStructuredPDFData = async (file: File, debugMode: boolean = 
         height: item.height
       }));
       
-      // Group text items by approximate rows (similar Y coordinates)
       const rows = groupTextItemsByRows(textItems);
       extractedTables.push(...rows);
       
@@ -160,14 +152,13 @@ export const extractStructuredPDFData = async (file: File, debugMode: boolean = 
       };
     }
 
-    // Parse the extracted table data
     const entries = parseTableData(extractedTables, file.name);
     
     result.entries = entries;
     result.success = entries.length > 0;
     
     if (entries.length === 0) {
-      result.errors.push('No structured financial data found in PDF');
+      result.errors.push('No structured financial data found in PDF. Connect Supabase for advanced extraction.');
     }
 
     console.log(`Extracted ${entries.length} entries from ${file.name}`);
@@ -182,14 +173,12 @@ export const extractStructuredPDFData = async (file: File, debugMode: boolean = 
 
 // Group text items by rows based on Y coordinates
 const groupTextItemsByRows = (textItems: any[]): any[] => {
-  const tolerance = 5; // Y-coordinate tolerance for grouping
+  const tolerance = 5;
   const rows: any[] = [];
   
-  // Sort by Y coordinate (top to bottom)
   textItems.sort((a, b) => b.y - a.y);
   
   for (const item of textItems) {
-    // Find existing row with similar Y coordinate
     let foundRow = rows.find(row => Math.abs(row.y - item.y) <= tolerance);
     
     if (foundRow) {
@@ -202,7 +191,6 @@ const groupTextItemsByRows = (textItems: any[]): any[] => {
     }
   }
   
-  // Sort items within each row by X coordinate (left to right)
   rows.forEach(row => {
     row.items.sort((a: any, b: any) => a.x - b.x);
     row.text = row.items.map((item: any) => item.text).join(' ').trim();
@@ -216,15 +204,13 @@ const parseTableData = (tableRows: any[], filename: string): RawFinancialEntry[]
   const entries: RawFinancialEntry[] = [];
   const currentDate = new Date().toISOString().split('T')[0];
   
-  // Extract period from filename if possible
   const periodMatch = filename.match(/(\d{4})/);
   const period = periodMatch ? `${periodMatch[1]}-12-31` : currentDate;
   
   for (const row of tableRows) {
     const text = row.text;
-    if (!text || text.length < 10) continue; // Skip very short lines
+    if (!text || text.length < 10) continue;
     
-    // Try to parse as financial statement line
     const parsedEntry = parseFinancialLine(text, period);
     if (parsedEntry) {
       entries.push(parsedEntry);
@@ -236,10 +222,9 @@ const parseTableData = (tableRows: any[], filename: string): RawFinancialEntry[]
 
 // Parse individual financial statement line
 const parseFinancialLine = (line: string, defaultDate: string): RawFinancialEntry | null => {
-  // Skip headers and non-data lines
   if (isHeaderLine(line)) return null;
   
-  // Pattern 1: Account# Description Amount (common trial balance format)
+  // Pattern 1: Account# Description Amount
   let match = line.match(/^(\d+)\s+(.+?)\s+([\d,.\-()$£€¥₹\s]+)$/);
   if (match) {
     const [, accountNumber, description, amountStr] = match;
@@ -255,7 +240,7 @@ const parseFinancialLine = (line: string, defaultDate: string): RawFinancialEntr
     };
   }
   
-  // Pattern 2: Description Debit Credit (detailed trial balance)
+  // Pattern 2: Description Debit Credit
   match = line.match(/^(.+?)\s+([\d,.\-()$£€¥₹\s]+)\s+([\d,.\-()$£€¥₹\s]+)$/);
   if (match) {
     const [, description, debitStr, creditStr] = match;
@@ -281,7 +266,7 @@ const parseFinancialLine = (line: string, defaultDate: string): RawFinancialEntr
     const [, description, amountStr] = match;
     const amount = normalizeAmount(amountStr);
     
-    if (Math.abs(amount) > 100) { // Filter out small/irrelevant amounts
+    if (Math.abs(amount) > 100) {
       return {
         account_number: extractAccountNumber(description) || '',
         description: cleanDescription(description),
@@ -307,7 +292,7 @@ const isHeaderLine = (line: string): boolean => {
   
   return headerKeywords.some(keyword => lowerLine.includes(keyword)) ||
          line.trim().length < 5 ||
-         /^[\s\-_=]+$/.test(line); // Lines with only separators
+         /^[\s\-_=]+$/.test(line);
 };
 
 // Extract account number from description if embedded
@@ -319,8 +304,8 @@ const extractAccountNumber = (description: string): string | null => {
 // Clean description by removing account numbers and extra whitespace
 const cleanDescription = (description: string): string => {
   return description
-    .replace(/^\d{3,6}\s*/, '') // Remove leading account number
-    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/^\d{3,6}\s*/, '')
+    .replace(/\s+/g, ' ')
     .trim();
 };
 
