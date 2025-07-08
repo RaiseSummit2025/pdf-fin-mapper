@@ -1,15 +1,15 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, ArrowRight, GripVertical, Download } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, ArrowRight, GripVertical, Download, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FinancialEntry, FinancialData } from '@/types/financial';
 import { FileSelector } from '@/components/FileSelector';
-import { extractStructuredPDFData, convertToLovableFormat, RawFinancialEntry } from '@/services/pdfExtractionService';
+import { SupabasePdfService, ProcessingStatus } from '@/services/supabasePdfService';
 import {
   DndContext,
   closestCenter,
@@ -258,11 +258,13 @@ export function PdfUpload() {
   const [showMappingEngine, setShowMappingEngine] = useState(false);
   const [mappedData, setMappedData] = useState<FinancialData | null>(null);
   const [extractionResult, setExtractionResult] = useState<any>(null);
-  const [debugMode, setDebugMode] = useState(false);
+  const [currentUploadId, setCurrentUploadId] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const { toast } = useToast();
   const { addFile, currentFinancialData, updateFileData, selectedFileId } = useFinancialData();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pdfService = new SupabasePdfService();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -322,94 +324,101 @@ export function PdfUpload() {
     }
   };
 
+  // Status polling effect
+  useEffect(() => {
+    if (!currentUploadId || !isProcessing) return;
+
+    const pollStatus = async () => {
+      const status = await pdfService.getProcessingStatus(currentUploadId);
+      setProcessingStatus(status);
+
+      if (status.status === 'completed') {
+        const extractedData = await pdfService.getExtractedData(currentUploadId);
+        if (extractedData) {
+          setMappedData(extractedData);
+          const newFileData = {
+            id: currentUploadId,
+            filename: uploadedFile?.name || 'Unknown',
+            uploadDate: new Date().toISOString(),
+            data: extractedData
+          };
+          addFile(newFileData);
+          setShowMappingEngine(true);
+          setProgress(100);
+          setSteps(prev => prev.map(step => ({ ...step, status: 'completed' })));
+          
+          toast({
+            title: "Processing Complete",
+            description: `Extracted ${status.extractedCount} financial entries`,
+          });
+        }
+        setIsProcessing(false);
+        setCurrentUploadId(null);
+      } else if (status.status === 'failed') {
+        setSteps(prev => prev.map(step => ({ ...step, status: 'error' })));
+        setIsProcessing(false);
+        setCurrentUploadId(null);
+        
+        toast({
+          title: "Processing Failed",
+          description: status.error || 'Unknown error occurred',
+          variant: "destructive"
+        });
+      } else if (status.status === 'processing') {
+        setProgress(50); // Show progress during processing
+        setSteps(prev => prev.map((step, index) => 
+          index <= 1 ? { ...step, status: 'completed' } : 
+          index === 2 ? { ...step, status: 'processing' } : step
+        ));
+      }
+    };
+
+    const interval = setInterval(pollStatus, 2000); // Poll every 2 seconds
+    return () => clearInterval(interval);
+  }, [currentUploadId, isProcessing, uploadedFile?.name, pdfService, addFile, toast]);
+
   const processStructuredPDF = async () => {
     if (!uploadedFile) return;
     
     setIsProcessing(true);
+    setProgress(0);
     
     try {
       // Step 1: File Upload
       setSteps(prev => prev.map((step, index) => 
         index === 0 ? { ...step, status: 'processing' } : step
       ));
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setSteps(prev => prev.map((step, index) => 
-        index === 0 ? { ...step, status: 'completed' } : step
-      ));
-      setProgress(25);
+      
+      const uploadResult = await pdfService.uploadPdf(uploadedFile);
+      
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
 
-      // Step 2: IFRS Mapping (Enhanced PDF Extraction)
+      setCurrentUploadId(uploadResult.uploadId!);
+      setProgress(25);
       setSteps(prev => prev.map((step, index) => 
+        index === 0 ? { ...step, status: 'completed' } :
         index === 1 ? { ...step, status: 'processing' } : step
       ));
       
-      console.log('Starting enhanced PDF extraction...');
-      const result = await extractStructuredPDFData(uploadedFile, debugMode);
-      setExtractionResult(result);
-      
-      if (result.success && result.entries.length > 0) {
-        const lovableData = convertToLovableFormat(result.entries, uploadedFile.name);
-        setMappedData(lovableData);
-        
-        // Create new file entry
-        const newFileData = {
-          id: `file-${Date.now()}`,
-          filename: uploadedFile.name,
-          uploadDate: new Date().toISOString(),
-          data: lovableData
-        };
-        
-        addFile(newFileData);
-        
-        toast({
-          title: "Extraction Successful",
-          description: `Extracted ${result.entries.length} financial entries`,
-          variant: "default"
-        });
-      } else {
-        throw new Error(result.errors.join(', ') || 'No data extracted');
-      }
-      
-      setSteps(prev => prev.map((step, index) => 
-        index === 1 ? { ...step, status: 'completed' } : step
-      ));
-      setProgress(50);
-
-      // Step 3: Data Validation
-      setSteps(prev => prev.map((step, index) => 
-        index === 2 ? { ...step, status: 'processing' } : step
-      ));
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setSteps(prev => prev.map((step, index) => 
-        index === 2 ? { ...step, status: 'completed' } : step
-      ));
-      setProgress(75);
-
-      // Step 4: Completion
-      setSteps(prev => prev.map((step, index) => 
-        index === 3 ? { ...step, status: 'processing' } : step
-      ));
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setSteps(prev => prev.map((step, index) => 
-        index === 3 ? { ...step, status: 'completed' } : step
-      ));
-      setProgress(100);
-      
-      setShowMappingEngine(true);
+      toast({
+        title: "Upload Successful",
+        description: "PDF uploaded and processing started",
+      });
       
     } catch (error) {
       console.error('Processing failed:', error);
       setSteps(prev => prev.map(step => 
         step.status === 'processing' ? { ...step, status: 'error' } : step
       ));
+      setIsProcessing(false);
       
       toast({
-        title: "Processing Failed",
+        title: "Upload Failed",
         description: error instanceof Error ? error.message : 'Unknown error occurred',
         variant: "destructive"
       });
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -580,56 +589,14 @@ export function PdfUpload() {
               <h2 className="text-2xl font-bold text-gray-900">IFRS Mapping Engine</h2>
               <p className="text-gray-600">No structured data found in the uploaded PDF</p>
             </div>
-            {extractionResult && (
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setDebugMode(!debugMode)}>
-                  {debugMode ? 'Hide' : 'Show'} Debug Info
-                </Button>
-                {extractionResult.entries && (
-                  <Button variant="outline" onClick={downloadRawData} className="gap-2">
-                    <Download className="h-4 w-4" />
-                    Download JSON
-                  </Button>
-                )}
-              </div>
+            {extractionResult && extractionResult.entries && (
+              <Button variant="outline" onClick={downloadRawData} className="gap-2">
+                <Download className="h-4 w-4" />
+                Download JSON
+              </Button>
             )}
           </div>
           
-          {debugMode && extractionResult && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Extraction Debug Info</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p><strong>Success:</strong> {extractionResult.success ? 'Yes' : 'No'}</p>
-                    <p><strong>Entries Found:</strong> {extractionResult.entries?.length || 0}</p>
-                    <p><strong>Errors:</strong> {extractionResult.errors?.length || 0}</p>
-                  </div>
-                  <div>
-                    {extractionResult.debug_info && (
-                      <>
-                        <p><strong>Pages:</strong> {extractionResult.debug_info.totalPages}</p>
-                        <p><strong>Rows Extracted:</strong> {extractionResult.debug_info.extractedRows}</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-                
-                {extractionResult.errors && extractionResult.errors.length > 0 && (
-                  <div>
-                    <h4 className="font-medium text-red-600 mb-2">Errors:</h4>
-                    <ul className="list-disc pl-5 text-sm text-red-600">
-                      {extractionResult.errors.map((error: string, idx: number) => (
-                        <li key={idx}>{error}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
           
           <div className="text-center text-gray-500 py-12 border border-gray-200 rounded-lg">
             <p className="text-lg mb-2">No Financial Data Available</p>
@@ -943,23 +910,9 @@ export function PdfUpload() {
               />
 
               {uploadedFile && !isProcessing && progress === 0 && (
-                <div className="space-y-2">
-                  <Button onClick={processStructuredPDF} className="w-full" size="lg">
-                    Process PDF with Enhanced Extraction
-                  </Button>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="debug-mode"
-                      checked={debugMode}
-                      onChange={(e) => setDebugMode(e.target.checked)}
-                      className="rounded"
-                    />
-                    <label htmlFor="debug-mode" className="text-sm text-muted-foreground">
-                      Enable debug mode (show extraction details)
-                    </label>
-                  </div>
-                </div>
+                <Button onClick={processStructuredPDF} className="w-full" size="lg">
+                  Process PDF with Backend Extraction
+                </Button>
               )}
 
               {isProcessing && (
