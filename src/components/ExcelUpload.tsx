@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, FileText, AlertCircle } from 'lucide-react';
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, FileText, AlertCircle, Database, BarChart3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { excelService } from '@/services/excelService';
 
@@ -15,7 +15,20 @@ interface UploadStatus {
   success: boolean;
   fileName?: string;
   fileSize?: number;
+  currentStep?: string;
+  recordsCount?: number;
+  sheetsCount?: number;
 }
+
+const uploadSteps = [
+  { step: 'Validating file...', progress: 10 },
+  { step: 'Creating upload record...', progress: 20 },
+  { step: 'Uploading to storage...', progress: 40 },
+  { step: 'Processing Excel data...', progress: 70 },
+  { step: 'Extracting financial entries...', progress: 85 },
+  { step: 'Finalizing upload...', progress: 95 },
+  { step: 'Upload completed!', progress: 100 }
+];
 
 export const ExcelUpload = () => {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({
@@ -35,6 +48,13 @@ export const ExcelUpload = () => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const simulateProgress = async (onProgress: (step: string, progress: number) => void) => {
+    for (const { step, progress } of uploadSteps.slice(0, -1)) {
+      onProgress(step, progress);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  };
+
   const handleFileSelect = async (file: File) => {
     if (!file) return;
 
@@ -43,20 +63,29 @@ export const ExcelUpload = () => {
     // Reset status
     setUploadStatus({
       isUploading: true,
-      progress: 10,
+      progress: 0,
       error: null,
       success: false,
       fileName: file.name,
-      fileSize: file.size
+      fileSize: file.size,
+      currentStep: 'Starting upload...'
     });
 
     try {
-      // Upload progress simulation
-      setUploadStatus(prev => ({ ...prev, progress: 30 }));
+      // Start progress simulation
+      const progressPromise = simulateProgress((step, progress) => {
+        setUploadStatus(prev => ({ 
+          ...prev, 
+          progress, 
+          currentStep: step 
+        }));
+      });
 
-      const result = await excelService.uploadExcelFile(file);
-      
-      setUploadStatus(prev => ({ ...prev, progress: 80 }));
+      // Start actual upload
+      const uploadPromise = excelService.uploadExcelFile(file);
+
+      // Wait for both to complete
+      const [, result] = await Promise.all([progressPromise, uploadPromise]);
 
       if (result.success) {
         setUploadStatus({
@@ -65,7 +94,10 @@ export const ExcelUpload = () => {
           error: null,
           success: true,
           fileName: file.name,
-          fileSize: file.size
+          fileSize: file.size,
+          currentStep: 'Upload completed!',
+          recordsCount: result.records_count,
+          sheetsCount: result.sheets_count
         });
 
         toast({
@@ -83,7 +115,8 @@ export const ExcelUpload = () => {
         error: error instanceof Error ? error.message : 'Upload failed',
         success: false,
         fileName: file.name,
-        fileSize: file.size
+        fileSize: file.size,
+        currentStep: 'Upload failed'
       });
 
       toast({
@@ -192,12 +225,14 @@ export const ExcelUpload = () => {
                 {uploadStatus.isUploading ? (
                   <div>
                     <p className="text-lg font-medium text-foreground">Processing Excel file...</p>
-                    <p className="text-sm text-muted-foreground">Extracting and analyzing data</p>
+                    <p className="text-sm text-muted-foreground">{uploadStatus.currentStep}</p>
                   </div>
                 ) : uploadStatus.success ? (
                   <div>
                     <p className="text-lg font-medium text-green-700">Upload completed successfully!</p>
-                    <p className="text-sm text-green-600">File processed and data extracted</p>
+                    <p className="text-sm text-green-600">
+                      Processed {uploadStatus.recordsCount || 0} records from {uploadStatus.sheetsCount || 0} sheets
+                    </p>
                   </div>
                 ) : uploadStatus.error ? (
                   <div>
@@ -234,7 +269,17 @@ export const ExcelUpload = () => {
                   )}
                 </div>
                 {uploadStatus.success && (
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Database className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-blue-600">{uploadStatus.recordsCount} records</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <BarChart3 className="w-4 h-4 text-green-600" />
+                      <span className="text-xs text-green-600">{uploadStatus.sheetsCount} sheets</span>
+                    </div>
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                  </div>
                 )}
                 {uploadStatus.error && (
                   <XCircle className="w-5 h-5 text-red-600" />
@@ -250,7 +295,7 @@ export const ExcelUpload = () => {
           {uploadStatus.isUploading && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Upload Progress</span>
+                <span className="text-muted-foreground">{uploadStatus.currentStep}</span>
                 <span className="font-medium">{uploadStatus.progress}%</span>
               </div>
               <Progress value={uploadStatus.progress} className="w-full" />

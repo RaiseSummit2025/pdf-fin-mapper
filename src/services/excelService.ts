@@ -88,12 +88,12 @@ class ExcelService {
 
       console.log('File uploaded to storage successfully');
 
-      // Update upload record with storage path
+      // Update upload record with storage path and status
       const { error: pathUpdateError } = await supabase
         .from('excel_uploads')
         .update({
           storage_path: filePath,
-          processing_status: 'uploaded'
+          processing_status: 'processing'
         })
         .eq('id', upload.id);
 
@@ -101,26 +101,30 @@ class ExcelService {
         console.error('Failed to update storage path:', pathUpdateError);
       }
 
-      // Process the Excel file using edge function
-      console.log('Invoking process-excel function with upload_id:', upload.id);
+      // Process the Excel file using the direct function URL
+      console.log('Processing Excel file with upload_id:', upload.id);
       
       try {
-        const functionResponse = await supabase.functions.invoke('process-excel', {
-          body: JSON.stringify({ upload_id: upload.id }),
+        const functionUrl = 'https://eljikaqbumdqkrssudrm.supabase.co/functions/v1/process-excel';
+        
+        const response = await fetch(functionUrl, {
+          method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-          }
+            'Authorization': `Bearer ${supabase.supabaseKey}`,
+          },
+          body: JSON.stringify({ upload_id: upload.id })
         });
 
-        console.log('Function response:', functionResponse);
-
-        if (functionResponse.error) {
-          console.error('Excel processing failed:', functionResponse.error);
-          await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${functionResponse.error.message}`);
-          throw new Error(`Excel processing failed: ${functionResponse.error.message}`);
+        console.log('Function response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Function request failed:', response.status, errorText);
+          throw new Error(`Processing failed: ${response.status} - ${errorText}`);
         }
 
-        const processResult = functionResponse.data;
+        const processResult = await response.json();
         console.log('Excel processing result:', processResult);
 
         // Check if the processing was successful
@@ -140,8 +144,8 @@ class ExcelService {
         };
 
       } catch (functionError) {
-        console.error('Function invocation error:', functionError);
-        await this.updateUploadStatus(upload.id, 'failed', `Function error: ${functionError.message}`);
+        console.error('Function processing error:', functionError);
+        await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${functionError.message}`);
         throw new Error(`Processing failed: ${functionError.message}`);
       }
 
