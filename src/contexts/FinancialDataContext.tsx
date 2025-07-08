@@ -20,6 +20,7 @@ interface FinancialDataContextType {
   updateFileData: (fileId: string, data: FinancialData) => void;
   isProcessedData: boolean;
   setIsProcessedData: (processed: boolean) => void;
+  addExcelData: (filename: string, excelData: any) => void;
 }
 
 const FinancialDataContext = createContext<FinancialDataContextType | undefined>(undefined);
@@ -61,6 +62,74 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
     ));
   };
 
+  const addExcelData = (filename: string, excelData: any) => {
+    console.log('Adding Excel data:', excelData);
+    
+    // Convert Excel data to FinancialData format
+    const entries = excelData.sampleRows?.map((row: any[], index: number) => {
+      const description = String(row[0] || '').trim();
+      const amount = parseFloat(String(row[1] || '0').replace(/[^0-9.-]/g, '')) || 0;
+      
+      // Determine category based on description keywords
+      let highLevelCategory: 'Assets' | 'Liabilities' | 'Equity' | 'Revenue' | 'Expenses' = 'Assets';
+      let mainGrouping = 'Current Assets';
+      let ifrsCategory = 'Cash and Cash Equivalents';
+      
+      const desc = description.toLowerCase();
+      
+      if (desc.includes('revenue') || desc.includes('sales') || desc.includes('income')) {
+        highLevelCategory = 'Revenue';
+        mainGrouping = 'Operating Revenue';
+        ifrsCategory = 'Revenue from Contracts with Customers';
+      } else if (desc.includes('expense') || desc.includes('cost') || desc.includes('depreciation')) {
+        highLevelCategory = 'Expenses';
+        mainGrouping = 'Operating Expenses';
+        ifrsCategory = 'Cost of Sales';
+      } else if (desc.includes('liability') || desc.includes('payable') || desc.includes('debt')) {
+        highLevelCategory = 'Liabilities';
+        mainGrouping = 'Current Liabilities';
+        ifrsCategory = 'Trade and Other Payables';
+      } else if (desc.includes('equity') || desc.includes('capital') || desc.includes('retained')) {
+        highLevelCategory = 'Equity';
+        mainGrouping = 'Share Capital';
+        ifrsCategory = 'Share Capital';
+      } else if (desc.includes('fixed') || desc.includes('property') || desc.includes('equipment')) {
+        highLevelCategory = 'Assets';
+        mainGrouping = 'Non-current Assets';
+        ifrsCategory = 'Property, Plant and Equipment';
+      }
+
+      return {
+        id: `excel-${index}`,
+        date: new Date().toISOString().split('T')[0],
+        description: description || `Item ${index + 1}`,
+        amount: amount,
+        highLevelCategory,
+        mainGrouping,
+        ifrsCategory,
+        originalLine: row.join(' | ')
+      };
+    }) || [];
+
+    const financialData: FinancialData = {
+      companyName: excelData.fileName?.replace(/\.[^/.]+$/, '') || 'Uploaded Company',
+      reportPeriod: new Date().getFullYear().toString(),
+      entries: entries.filter(entry => entry.description && entry.description !== 'Item 1'), // Filter out empty entries
+      lastUpdated: new Date().toISOString()
+    };
+
+    const newFile: FileData = {
+      id: `excel-${Date.now()}`,
+      filename: excelData.fileName || filename,
+      uploadDate: new Date().toISOString(),
+      data: financialData
+    };
+
+    console.log('Created financial data:', financialData);
+    addFile(newFile);
+    setIsProcessedData(true);
+  };
+
   return (
     <FinancialDataContext.Provider value={{
       files,
@@ -71,7 +140,8 @@ export function FinancialDataProvider({ children }: { children: ReactNode }) {
       selectFile,
       updateFileData,
       isProcessedData,
-      setIsProcessedData
+      setIsProcessedData,
+      addExcelData
     }}>
       {children}
     </FinancialDataContext.Provider>

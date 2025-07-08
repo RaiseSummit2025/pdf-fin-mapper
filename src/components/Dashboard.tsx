@@ -1,15 +1,14 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FileSelector } from '@/components/FileSelector';
 import { TrendingUp, TrendingDown, DollarSign, PieChart, AlertCircle } from 'lucide-react';
 
 export function Dashboard() {
-  const { currentFinancialData } = useFinancialData();
+  const { currentFinancialData, isProcessedData } = useFinancialData();
   const { entries, companyName, reportPeriod } = currentFinancialData;
 
-  // Show message if no data is available
-  if (!entries || entries.length === 0) {
+  // Show message if no data is available or only mock data
+  if (!entries || entries.length === 0 || (!isProcessedData && entries.length <= 10)) {
     return (
       <div className="space-y-6">
         <div>
@@ -75,6 +74,9 @@ export function Dashboard() {
       <div>
         <h2 className="text-2xl font-bold text-foreground">{companyName || 'Company Financial Data'}</h2>
         <p className="text-muted-foreground">{reportPeriod || 'Current Period'}</p>
+        {isProcessedData && (
+          <p className="text-sm text-green-600 mt-1">✅ Showing processed Excel data ({entries.length} entries)</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

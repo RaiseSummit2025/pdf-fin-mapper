@@ -12,7 +12,7 @@ import { financialDataToCSV } from '@/lib/csv';
 import { Search, Download, Filter, AlertCircle } from 'lucide-react';
 
 export function UnderlyingData() {
-  const { currentFinancialData } = useFinancialData();
+  const { currentFinancialData, isProcessedData } = useFinancialData();
   const [entries] = useState<FinancialEntry[]>(currentFinancialData.entries || []);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -26,8 +26,8 @@ export function UnderlyingData() {
       minimumFractionDigits: 0 
     }).format(amount);
 
-  // Show message if no data is available
-  if (!entries || entries.length === 0) {
+  // Show message if no data is available or only mock data
+  if (!entries || entries.length === 0 || (!isProcessedData && entries.length <= 10)) {
     return (
       <div className="space-y-6">
         <div>
@@ -127,6 +127,9 @@ export function UnderlyingData() {
       <div>
         <h1 className="text-3xl font-bold text-foreground">Underlying Data</h1>
         <p className="text-muted-foreground">Complete flat file with all extracted and mapped financial data</p>
+        {isProcessedData && (
+          <p className="text-sm text-green-600 mt-1">✅ Showing processed Excel data ({entries.length} entries)</p>
+        )}
       </div>
 
       <FileSelector />
