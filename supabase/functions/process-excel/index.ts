@@ -34,6 +34,11 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
+    console.log('Environment check:', { 
+      hasUrl: !!supabaseUrl, 
+      hasKey: !!supabaseServiceKey 
+    });
+    
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error('Missing Supabase environment variables');
     }
@@ -78,6 +83,8 @@ serve(async (req) => {
       .eq('id', upload_id);
 
     // Download file from storage
+    console.log('Downloading file from storage path:', upload.storage_path);
+    
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('excel-uploads')
       .download(upload.storage_path);
@@ -173,6 +180,8 @@ serve(async (req) => {
     }
 
     // Update upload status to completed
+    console.log('Updating upload status to completed');
+    
     await supabase
       .from('excel_uploads')
       .update({
@@ -249,6 +258,8 @@ function extractFinancialData(rows: any[][], sheetName: string, filename: string
     return entries;
   }
   
+  console.log(`Starting data extraction from sheet ${sheetName} with ${rows.length} rows`);
+
   // Skip first few rows that might be headers
   let dataStartRow = 0;
   for (let i = 0; i < Math.min(10, rows.length); i++) {
