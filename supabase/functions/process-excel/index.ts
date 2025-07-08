@@ -20,10 +20,9 @@ interface FinancialEntry {
   row_number: number;
 }
 
-const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
 serve(async (req) => {
+  console.log('Process Excel function called with method:', req.method);
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -32,13 +31,26 @@ serve(async (req) => {
   let upload_id: string | undefined;
   
   try {
-    console.log('Processing Excel request...');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      throw new Error('Missing Supabase environment variables');
+    }
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const requestBody = await req.json();
-    upload_id = requestBody.upload_id;
+    let requestBody;
+    try {
+      const text = await req.text();
+      console.log('Request body text:', text);
+      requestBody = JSON.parse(text);
+    } catch (parseError) {
+      console.error('Error parsing request body:', parseError);
+      throw new Error('Invalid JSON in request body');
+    }
     
+    upload_id = requestBody.upload_id;
     console.log('Processing upload ID:', upload_id);
     
     if (!upload_id) {
@@ -54,7 +66,7 @@ serve(async (req) => {
 
     if (uploadError || !upload) {
       console.error('Upload not found:', uploadError);
-      throw new Error('Upload not found');
+      throw new Error(`Upload not found: ${uploadError?.message || 'Unknown error'}`);
     }
 
     console.log('Found upload record:', upload.filename);
@@ -72,7 +84,7 @@ serve(async (req) => {
 
     if (downloadError || !fileData) {
       console.error('Failed to download file:', downloadError);
-      throw new Error('Failed to download Excel file');
+      throw new Error(`Failed to download Excel file: ${downloadError?.message || 'Unknown error'}`);
     }
 
     console.log('Downloaded file successfully, size:', fileData.size);
@@ -195,15 +207,20 @@ serve(async (req) => {
     // Update upload status to failed if we have an upload_id
     if (upload_id) {
       try {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-        await supabase
-          .from('excel_uploads')
-          .update({
-            processing_status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error',
-            completed_at: new Date().toISOString()
-          })
-          .eq('id', upload_id);
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        
+        if (supabaseUrl && supabaseServiceKey) {
+          const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          await supabase
+            .from('excel_uploads')
+            .update({
+              processing_status: 'failed',
+              error_message: error instanceof Error ? error.message : 'Unknown error',
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', upload_id);
+        }
       } catch (updateError) {
         console.error('Error updating upload status:', updateError);
       }
