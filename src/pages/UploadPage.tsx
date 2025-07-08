@@ -1,7 +1,9 @@
+
 import { PdfUpload } from '@/components/PdfUpload';
 import { ExcelUpload } from '@/components/ExcelUpload';
+import { ExcelProcessor } from '@/components/ExcelProcessor';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, FileSpreadsheet } from 'lucide-react';
+import { FileText, FileSpreadsheet, Zap } from 'lucide-react';
 
 const UploadPage = () => {
   return (
@@ -12,7 +14,7 @@ const UploadPage = () => {
       </div>
 
       <Tabs defaultValue="pdf" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="pdf" className="flex items-center gap-2">
             <FileText className="w-4 h-4" />
             PDF Upload
@@ -20,6 +22,10 @@ const UploadPage = () => {
           <TabsTrigger value="excel" className="flex items-center gap-2">
             <FileSpreadsheet className="w-4 h-4" />
             Excel/CSV Upload
+          </TabsTrigger>
+          <TabsTrigger value="processor" className="flex items-center gap-2">
+            <Zap className="w-4 h-4" />
+            Excel Processor
           </TabsTrigger>
         </TabsList>
         
@@ -29,6 +35,10 @@ const UploadPage = () => {
         
         <TabsContent value="excel" className="mt-6">
           <ExcelUpload />
+        </TabsContent>
+        
+        <TabsContent value="processor" className="mt-6">
+          <ExcelProcessor />
         </TabsContent>
       </Tabs>
     </div>
