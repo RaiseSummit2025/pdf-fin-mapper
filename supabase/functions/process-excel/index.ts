@@ -22,6 +22,7 @@ interface FinancialEntry {
 
 serve(async (req) => {
   console.log('Process Excel function called with method:', req.method);
+  console.log('Request headers:', Object.fromEntries(req.headers.entries()));
   
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -31,38 +32,51 @@ serve(async (req) => {
   let upload_id: string | undefined;
   
   try {
+    // Environment variables check
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    console.log('Environment check:', { 
+    console.log('Environment variables check:', { 
       hasUrl: !!supabaseUrl, 
-      hasKey: !!supabaseServiceKey 
+      hasKey: !!supabaseServiceKey,
+      urlValue: supabaseUrl ? 'present' : 'missing',
+      keyValue: supabaseServiceKey ? 'present' : 'missing'
     });
     
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing environment variables:', { supabaseUrl: !!supabaseUrl, supabaseServiceKey: !!supabaseServiceKey });
       throw new Error('Missing Supabase environment variables');
     }
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log('Supabase client created successfully');
     
+    // Parse request body
     let requestBody;
     try {
       const text = await req.text();
-      console.log('Request body text:', text);
+      console.log('Raw request body:', text);
+      
+      if (!text || text.trim() === '') {
+        throw new Error('Empty request body');
+      }
+      
       requestBody = JSON.parse(text);
+      console.log('Parsed request body:', requestBody);
     } catch (parseError) {
       console.error('Error parsing request body:', parseError);
-      throw new Error('Invalid JSON in request body');
+      throw new Error(`Invalid JSON in request body: ${parseError.message}`);
     }
     
     upload_id = requestBody.upload_id;
     console.log('Processing upload ID:', upload_id);
     
     if (!upload_id) {
-      throw new Error('Upload ID is required');
+      throw new Error('Upload ID is required in request body');
     }
 
     // Get upload record
+    console.log('Fetching upload record for ID:', upload_id);
     const { data: upload, error: uploadError } = await supabase
       .from('excel_uploads')
       .select('*')
@@ -74,16 +88,30 @@ serve(async (req) => {
       throw new Error(`Upload not found: ${uploadError?.message || 'Unknown error'}`);
     }
 
-    console.log('Found upload record:', upload.filename);
+    console.log('Found upload record:', { 
+      id: upload.id, 
+      filename: upload.filename, 
+      storage_path: upload.storage_path,
+      status: upload.processing_status 
+    });
 
     // Update status to processing
-    await supabase
+    console.log('Updating status to processing');
+    const { error: statusUpdateError } = await supabase
       .from('excel_uploads')
       .update({ processing_status: 'processing' })
       .eq('id', upload_id);
 
+    if (statusUpdateError) {
+      console.error('Failed to update status:', statusUpdateError);
+    }
+
     // Download file from storage
     console.log('Downloading file from storage path:', upload.storage_path);
+    
+    if (!upload.storage_path) {
+      throw new Error('No storage path found for upload');
+    }
     
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('excel-uploads')
@@ -94,12 +122,14 @@ serve(async (req) => {
       throw new Error(`Failed to download Excel file: ${downloadError?.message || 'Unknown error'}`);
     }
 
-    console.log('Downloaded file successfully, size:', fileData.size);
+    console.log('Downloaded file successfully, size:', fileData.size, 'bytes');
 
     // Convert file to ArrayBuffer
     const arrayBuffer = await fileData.arrayBuffer();
+    console.log('File converted to ArrayBuffer, size:', arrayBuffer.byteLength);
     
     // Parse Excel file
+    console.log('Parsing Excel file...');
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     
     console.log('Excel sheets found:', workbook.SheetNames);
@@ -109,7 +139,7 @@ serve(async (req) => {
     
     // Process each sheet
     for (const sheetName of workbook.SheetNames) {
-      console.log('Processing sheet:', sheetName);
+      console.log(`Processing sheet: ${sheetName}`);
       
       const worksheet = workbook.Sheets[sheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -121,7 +151,7 @@ serve(async (req) => {
         const rowData = jsonData[i] as any[];
         if (rowData && rowData.length > 0 && rowData.some(cell => cell !== null && cell !== undefined && cell !== '')) {
           try {
-            await supabase
+            const { error: insertError } = await supabase
               .from('excel_data')
               .insert({
                 upload_id: upload_id,
@@ -131,7 +161,12 @@ serve(async (req) => {
                 cell_value: JSON.stringify(rowData),
                 data_type: 'array'
               });
-            totalRecords++;
+            
+            if (insertError) {
+              console.error(`Error inserting row ${i + 1}:`, insertError);
+            } else {
+              totalRecords++;
+            }
           } catch (insertError) {
             console.error('Error inserting row data:', insertError);
           }
@@ -142,12 +177,13 @@ serve(async (req) => {
       try {
         const sheetFinancials = extractFinancialData(jsonData, sheetName, upload.filename);
         financialEntries.push(...sheetFinancials);
+        console.log(`Extracted ${sheetFinancials.length} financial entries from sheet ${sheetName}`);
       } catch (extractError) {
         console.error('Error extracting financial data from sheet:', sheetName, extractError);
       }
     }
 
-    console.log('Extracted financial entries:', financialEntries.length);
+    console.log('Total financial entries extracted:', financialEntries.length);
 
     // Insert financial data into trial_balances table
     if (financialEntries.length > 0) {
@@ -173,7 +209,7 @@ serve(async (req) => {
           throw new Error(`Failed to insert trial balance records: ${insertError.message}`);
         }
 
-        console.log('Inserted trial balance records:', trialBalanceRecords.length);
+        console.log('Successfully inserted trial balance records:', trialBalanceRecords.length);
       } catch (insertError) {
         console.error('Error inserting trial balance records:', insertError);
       }
@@ -182,7 +218,7 @@ serve(async (req) => {
     // Update upload status to completed
     console.log('Updating upload status to completed');
     
-    await supabase
+    const { error: completionError } = await supabase
       .from('excel_uploads')
       .update({
         processing_status: 'completed',
@@ -191,6 +227,10 @@ serve(async (req) => {
         sheets_count: workbook.SheetNames.length
       })
       .eq('id', upload_id);
+
+    if (completionError) {
+      console.error('Error updating completion status:', completionError);
+    }
 
     console.log('Excel processing completed successfully');
 
@@ -212,6 +252,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Excel processing error:', error);
+    console.error('Error stack:', error.stack);
     
     // Update upload status to failed if we have an upload_id
     if (upload_id) {
@@ -231,14 +272,15 @@ serve(async (req) => {
             .eq('id', upload_id);
         }
       } catch (updateError) {
-        console.error('Error updating upload status:', updateError);
+        console.error('Error updating upload status to failed:', updateError);
       }
     }
 
     return new Response(
       JSON.stringify({ 
         error: error instanceof Error ? error.message : 'Unknown error',
-        success: false 
+        success: false,
+        details: error instanceof Error ? error.stack : undefined
       }),
       {
         status: 500,

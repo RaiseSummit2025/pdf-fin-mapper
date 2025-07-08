@@ -1,3 +1,4 @@
+
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExcelUploadResult {
@@ -50,6 +51,7 @@ class ExcelService {
       }
 
       // Create upload record
+      console.log('Creating upload record...');
       const { data: upload, error: uploadError } = await supabase
         .from('excel_uploads')
         .insert({
@@ -65,10 +67,12 @@ class ExcelService {
         throw new Error(`Failed to create upload record: ${uploadError?.message || 'Unknown error'}`);
       }
 
-      console.log('Upload record created:', upload.id);
+      console.log('Upload record created with ID:', upload.id);
 
       // Upload file to storage
       const filePath = `${upload.id}/${file.name}`;
+      console.log('Uploading file to storage path:', filePath);
+      
       const { error: storageError } = await supabase.storage
         .from('excel-uploads')
         .upload(filePath, file, {
@@ -82,42 +86,52 @@ class ExcelService {
         throw new Error(`File upload failed: ${storageError.message}`);
       }
 
-      console.log('File uploaded to storage:', filePath);
+      console.log('File uploaded to storage successfully');
 
       // Update upload record with storage path
-      await supabase
+      const { error: pathUpdateError } = await supabase
         .from('excel_uploads')
         .update({
           storage_path: filePath,
-          processing_status: 'processing'
+          processing_status: 'uploaded'
         })
         .eq('id', upload.id);
 
+      if (pathUpdateError) {
+        console.error('Failed to update storage path:', pathUpdateError);
+      }
+
       // Process the Excel file using edge function
-      console.log('Invoking process-excel function...');
+      console.log('Invoking process-excel function with upload_id:', upload.id);
       
       try {
-        const { data: processResult, error: processError } = await supabase.functions.invoke('process-excel', {
-          body: { upload_id: upload.id }
+        const functionResponse = await supabase.functions.invoke('process-excel', {
+          body: JSON.stringify({ upload_id: upload.id }),
+          headers: {
+            'Content-Type': 'application/json',
+          }
         });
 
-        if (processError) {
-          console.error('Excel processing failed:', processError);
-          await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${processError.message}`);
-          throw new Error(`Excel processing failed: ${processError.message}`);
+        console.log('Function response:', functionResponse);
+
+        if (functionResponse.error) {
+          console.error('Excel processing failed:', functionResponse.error);
+          await this.updateUploadStatus(upload.id, 'failed', `Processing error: ${functionResponse.error.message}`);
+          throw new Error(`Excel processing failed: ${functionResponse.error.message}`);
         }
 
-        console.log('Excel processing completed:', processResult);
+        const processResult = functionResponse.data;
+        console.log('Excel processing result:', processResult);
 
         // Check if the processing was successful
         if (!processResult || !processResult.success) {
           const errorMsg = processResult?.error || 'Processing failed - no response from server';
+          console.error('Processing failed:', errorMsg);
           await this.updateUploadStatus(upload.id, 'failed', errorMsg);
           throw new Error(errorMsg);
         }
 
-        await this.updateUploadStatus(upload.id, 'completed');
-
+        console.log('Excel processing completed successfully');
         return {
           success: true,
           records_count: processResult.total_records_count || 0,
