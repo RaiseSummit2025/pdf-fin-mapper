@@ -8,13 +8,26 @@ export interface ExcelUploadResult {
   upload_id?: string;
 }
 
+interface ExcelUpload {
+  id: string;
+  filename: string;
+  storage_path?: string;
+  processing_status?: string;
+  file_size?: number;
+  error_message?: string;
+  sheets_count?: number;
+  total_records_count?: number;
+  created_at: string;
+  completed_at?: string;
+}
+
 class ExcelService {
   async uploadExcelFile(file: File): Promise<ExcelUploadResult> {
     try {
       console.log('Starting Excel file upload:', file.name);
 
       // Create upload record
-      const { data: upload, error: uploadError } = await supabase
+      const { data: upload, error: uploadError } = await (supabase as any)
         .from('excel_uploads')
         .insert({
           filename: file.name,
@@ -22,9 +35,9 @@ class ExcelService {
           processing_status: 'uploading'
         })
         .select()
-        .single();
+        .single() as { data: ExcelUpload | null, error: any };
 
-      if (uploadError) {
+      if (uploadError || !upload) {
         console.error('Failed to create upload record:', uploadError);
         throw new Error('Failed to create upload record');
       }
@@ -46,7 +59,7 @@ class ExcelService {
       console.log('File uploaded to storage:', filePath);
 
       // Update upload record with storage path
-      await supabase
+      await (supabase as any)
         .from('excel_uploads')
         .update({
           storage_path: filePath,
@@ -70,7 +83,7 @@ class ExcelService {
 
       return {
         success: true,
-        records_count: processResult?.records_count || 0,
+        records_count: processResult?.total_records_count || 0,
         sheets_count: processResult?.sheets_count || 0,
         upload_id: upload.id
       };
@@ -85,7 +98,7 @@ class ExcelService {
   }
 
   private async updateUploadStatus(uploadId: string, status: string, errorMessage?: string) {
-    await supabase
+    await (supabase as any)
       .from('excel_uploads')
       .update({
         processing_status: status,
@@ -95,8 +108,8 @@ class ExcelService {
       .eq('id', uploadId);
   }
 
-  async getExcelUploads() {
-    const { data, error } = await supabase
+  async getExcelUploads(): Promise<ExcelUpload[]> {
+    const { data, error } = await (supabase as any)
       .from('excel_uploads')
       .select('*')
       .order('created_at', { ascending: false });
@@ -110,7 +123,7 @@ class ExcelService {
   }
 
   async getExcelData(uploadId: string) {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('excel_data')
       .select('*')
       .eq('upload_id', uploadId)
