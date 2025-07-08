@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -8,7 +9,7 @@ import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FileSelector } from '@/components/FileSelector';
 import { ifrsCategories } from '@/data/mockData';
 import { FinancialEntry } from '@/types/financial';
-import { Edit, Save, X } from 'lucide-react';
+import { Edit, Save, X, AlertCircle } from 'lucide-react';
 import { ReconciliationBadge, ReconciliationResult } from './mapping/ReconciliationBadge';
 import { ValidationChatAssistant } from './mapping/ValidationChatAssistant';
 import { ReconciliationService } from '@/services/reconciliationService';
@@ -16,7 +17,7 @@ import React from 'react';
 
 export function DataMapping() {
   const { currentFinancialData, updateFileData, selectedFileId } = useFinancialData();
-  const [entries, setEntries] = useState<FinancialEntry[]>(currentFinancialData.entries);
+  const [entries, setEntries] = useState<FinancialEntry[]>(currentFinancialData.entries || []);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempCategory, setTempCategory] = useState<string>('');
   const [reconciliationResults, setReconciliationResults] = useState<ReconciliationResult[]>([]);
@@ -30,9 +31,33 @@ export function DataMapping() {
       minimumFractionDigits: 0 
     }).format(amount);
 
+  // Show message if no data is available
+  if (!entries || entries.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">IFRS Mapping</h1>
+          <p className="text-muted-foreground">Review and adjust account classifications with validation</p>
+        </div>
+
+        <FileSelector />
+
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Financial Data Available</h3>
+            <p className="text-muted-foreground text-center">
+              Please upload and process an Excel file using the Excel Processor to review and map account classifications.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const handleEditCategory = (entry: FinancialEntry) => {
     setEditingId(entry.id);
-    setTempCategory(entry.ifrsCategory);
+    setTempCategory(entry.ifrsCategory || '');
   };
 
   const handleSaveCategory = (entryId: string) => {
@@ -76,8 +101,10 @@ export function DataMapping() {
 
   // Perform reconciliation when component mounts or entries change
   React.useEffect(() => {
-    const results = ReconciliationService.performReconciliation(entries);
-    setReconciliationResults(results);
+    if (entries && entries.length > 0) {
+      const results = ReconciliationService.performReconciliation(entries);
+      setReconciliationResults(results);
+    }
   }, [entries]);
 
   const handleReviewClick = (category: string) => {
@@ -111,16 +138,35 @@ export function DataMapping() {
       return entry.highLevelCategory === filterCategory;
     });
 
-    const total = filteredEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const total = filteredEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
 
     // Group by IFRS category for reconciliation badges
     const categorizedEntries = filteredEntries.reduce((acc, entry) => {
-      if (!acc[entry.ifrsCategory]) {
-        acc[entry.ifrsCategory] = [];
+      const category = entry.ifrsCategory || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = [];
       }
-      acc[entry.ifrsCategory].push(entry);
+      acc[category].push(entry);
       return acc;
     }, {} as Record<string, FinancialEntry[]>);
+
+    if (filteredEntries.length === 0) {
+      return (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              {title}
+              <Badge variant="secondary">{formatCurrency(0)}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8 text-muted-foreground">
+              <p>No {title.toLowerCase()} data available</p>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
 
     return (
       <Card className="mb-6">
@@ -146,7 +192,7 @@ export function DataMapping() {
               <tbody>
                 {Object.entries(categorizedEntries).map(([category, categoryEntries]) => {
                   const reconciliation = getReconciliationResult(category);
-                  const categoryTotal = categoryEntries.reduce((sum, entry) => sum + entry.amount, 0);
+                  const categoryTotal = categoryEntries.reduce((sum, entry) => sum + (entry.amount || 0), 0);
                   
                   return (
                     <React.Fragment key={category}>
@@ -169,9 +215,9 @@ export function DataMapping() {
                       {/* Individual entries */}
                       {categoryEntries.map((entry) => (
                         <tr key={entry.id} className="border-b border-border hover:bg-muted/50">
-                          <td className="p-3 pl-6">{entry.description}</td>
-                          <td className="p-3 text-muted-foreground text-sm">{entry.originalLine}</td>
-                          <td className="p-3 text-right font-mono">{formatCurrency(entry.amount)}</td>
+                          <td className="p-3 pl-6">{entry.description || 'N/A'}</td>
+                          <td className="p-3 text-muted-foreground text-sm">{entry.originalLine || 'N/A'}</td>
+                          <td className="p-3 text-right font-mono">{formatCurrency(entry.amount || 0)}</td>
                           <td className="p-3">
                             {editingId === entry.id ? (
                               <Select value={tempCategory} onValueChange={setTempCategory}>
@@ -187,7 +233,7 @@ export function DataMapping() {
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <Badge variant="outline">{entry.ifrsCategory}</Badge>
+                              <Badge variant="outline">{entry.ifrsCategory || 'N/A'}</Badge>
                             )}
                           </td>
                           <td className="p-3 text-center">

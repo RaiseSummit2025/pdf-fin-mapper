@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,11 +9,11 @@ import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FileSelector } from '@/components/FileSelector';
 import { FinancialEntry } from '@/types/financial';
 import { financialDataToCSV } from '@/lib/csv';
-import { Search, Download, Filter } from 'lucide-react';
+import { Search, Download, Filter, AlertCircle } from 'lucide-react';
 
 export function UnderlyingData() {
   const { currentFinancialData } = useFinancialData();
-  const [entries] = useState<FinancialEntry[]>(currentFinancialData.entries);
+  const [entries] = useState<FinancialEntry[]>(currentFinancialData.entries || []);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<keyof FinancialEntry>('description');
@@ -25,11 +26,35 @@ export function UnderlyingData() {
       minimumFractionDigits: 0 
     }).format(amount);
 
+  // Show message if no data is available
+  if (!entries || entries.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Underlying Data</h1>
+          <p className="text-muted-foreground">Complete flat file with all extracted and mapped financial data</p>
+        </div>
+
+        <FileSelector />
+
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Financial Data Available</h3>
+            <p className="text-muted-foreground text-center">
+              Please upload and process an Excel file using the Excel Processor to view underlying financial data.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const filteredEntries = entries
     .filter(entry => {
-      const matchesSearch = entry.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      const matchesSearch = entry.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            entry.originalLine?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           entry.ifrsCategory.toLowerCase().includes(searchTerm.toLowerCase());
+                           entry.ifrsCategory?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCategory = categoryFilter === 'all' || entry.highLevelCategory === categoryFilter;
       return matchesSearch && matchesCategory;
     })
@@ -41,8 +66,8 @@ export function UnderlyingData() {
         return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
       }
       
-      const aStr = String(aValue).toLowerCase();
-      const bStr = String(bValue).toLowerCase();
+      const aStr = String(aValue || '').toLowerCase();
+      const bStr = String(bValue || '').toLowerCase();
       
       if (sortOrder === 'asc') {
         return aStr < bStr ? -1 : aStr > bStr ? 1 : 0;
@@ -164,18 +189,18 @@ export function UnderlyingData() {
               <tbody>
                 {filteredEntries.map((entry, index) => (
                   <tr key={entry.id} className={`border-b border-border hover:bg-muted/30 ${index % 2 === 0 ? 'bg-background' : 'bg-muted/10'}`}>
-                    <td className="p-3 text-sm">{entry.date}</td>
-                    <td className="p-3 font-medium">{entry.description}</td>
-                    <td className="p-3 text-sm text-muted-foreground">{entry.originalLine}</td>
-                    <td className="p-3 text-right font-mono">{formatCurrency(entry.amount)}</td>
+                    <td className="p-3 text-sm">{entry.date || 'N/A'}</td>
+                    <td className="p-3 font-medium">{entry.description || 'N/A'}</td>
+                    <td className="p-3 text-sm text-muted-foreground">{entry.originalLine || 'N/A'}</td>
+                    <td className="p-3 text-right font-mono">{formatCurrency(entry.amount || 0)}</td>
                     <td className="p-3">
                       <Badge className={getCategoryBadgeColor(entry.highLevelCategory)}>
                         {entry.highLevelCategory}
                       </Badge>
                     </td>
-                    <td className="p-3 text-sm">{entry.mainGrouping}</td>
+                    <td className="p-3 text-sm">{entry.mainGrouping || 'N/A'}</td>
                     <td className="p-3">
-                      <Badge variant="outline">{entry.ifrsCategory}</Badge>
+                      <Badge variant="outline">{entry.ifrsCategory || 'N/A'}</Badge>
                     </td>
                   </tr>
                 ))}

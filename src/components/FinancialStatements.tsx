@@ -1,8 +1,9 @@
-import { useState } from 'react';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FileSelector } from '@/components/FileSelector';
+import { AlertCircle } from 'lucide-react';
 
 export function FinancialStatements() {
   const { currentFinancialData } = useFinancialData();
@@ -15,18 +16,42 @@ export function FinancialStatements() {
       minimumFractionDigits: 0 
     }).format(amount);
 
+  // Show message if no data is available
+  if (!entries || entries.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Financial Statements</h1>
+          <p className="text-muted-foreground">Formatted financial statements based on processed data</p>
+        </div>
+
+        <FileSelector />
+
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Financial Data Available</h3>
+            <p className="text-muted-foreground text-center">
+              Please upload and process an Excel file using the Excel Processor to generate financial statements.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Balance Sheet Data
   const currentAssets = entries.filter(e => 
     e.highLevelCategory === 'Assets' && e.mainGrouping === 'Current Assets'
   );
   const nonCurrentAssets = entries.filter(e => 
-    e.highLevelCategory === 'Assets' && e.mainGrouping === 'Non-current Assets'
+    e.highLevelCategory === 'Assets' && (e.mainGrouping === 'Non-current Assets' || e.mainGrouping === 'Non-Current Assets')
   );
   const currentLiabilities = entries.filter(e => 
     e.highLevelCategory === 'Liabilities' && e.mainGrouping === 'Current Liabilities'
   );
   const nonCurrentLiabilities = entries.filter(e => 
-    e.highLevelCategory === 'Liabilities' && e.mainGrouping === 'Non-current Liabilities'
+    e.highLevelCategory === 'Liabilities' && (e.mainGrouping === 'Non-current Liabilities' || e.mainGrouping === 'Non-Current Liabilities')
   );
   const equity = entries.filter(e => e.highLevelCategory === 'Equity');
 
@@ -34,8 +59,8 @@ export function FinancialStatements() {
   const revenue = entries.filter(e => e.highLevelCategory === 'Revenue');
   const expenses = entries.filter(e => e.highLevelCategory === 'Expenses');
   
-  const totalRevenue = revenue.reduce((sum, e) => sum + e.amount, 0);
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalRevenue = revenue.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
   const netIncome = totalRevenue - totalExpenses;
 
   const StatementRow = ({ label, amount, isSubtotal = false, isTotal = false }: {
@@ -57,7 +82,7 @@ export function FinancialStatements() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Financial Statements</h1>
-        <p className="text-muted-foreground">{companyName} - {reportPeriod}</p>
+        <p className="text-muted-foreground">{companyName || 'Company Financial Data'} - {reportPeriod || 'Current Period'}</p>
       </div>
 
       <FileSelector />
@@ -76,37 +101,45 @@ export function FinancialStatements() {
                 <CardTitle>Assets</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div className="font-semibold text-base mb-3">Current Assets</div>
-                {currentAssets.map(entry => (
-                  <StatementRow 
-                    key={entry.id}
-                    label={entry.description}
-                    amount={entry.amount}
-                  />
-                ))}
-                <StatementRow 
-                  label="Total Current Assets"
-                  amount={currentAssets.reduce((sum, e) => sum + e.amount, 0)}
-                  isSubtotal
-                />
+                {currentAssets.length > 0 && (
+                  <>
+                    <div className="font-semibold text-base mb-3">Current Assets</div>
+                    {currentAssets.map(entry => (
+                      <StatementRow 
+                        key={entry.id}
+                        label={entry.description || 'N/A'}
+                        amount={entry.amount || 0}
+                      />
+                    ))}
+                    <StatementRow 
+                      label="Total Current Assets"
+                      amount={currentAssets.reduce((sum, e) => sum + (e.amount || 0), 0)}
+                      isSubtotal
+                    />
+                  </>
+                )}
                 
-                <div className="font-semibold text-base mb-3 mt-6">Non-Current Assets</div>
-                {nonCurrentAssets.map(entry => (
-                  <StatementRow 
-                    key={entry.id}
-                    label={entry.description}
-                    amount={entry.amount}
-                  />
-                ))}
-                <StatementRow 
-                  label="Total Non-Current Assets"
-                  amount={nonCurrentAssets.reduce((sum, e) => sum + e.amount, 0)}
-                  isSubtotal
-                />
+                {nonCurrentAssets.length > 0 && (
+                  <>
+                    <div className="font-semibold text-base mb-3 mt-6">Non-Current Assets</div>
+                    {nonCurrentAssets.map(entry => (
+                      <StatementRow 
+                        key={entry.id}
+                        label={entry.description || 'N/A'}
+                        amount={entry.amount || 0}
+                      />
+                    ))}
+                    <StatementRow 
+                      label="Total Non-Current Assets"
+                      amount={nonCurrentAssets.reduce((sum, e) => sum + (e.amount || 0), 0)}
+                      isSubtotal
+                    />
+                  </>
+                )}
                 
                 <StatementRow 
                   label="TOTAL ASSETS"
-                  amount={[...currentAssets, ...nonCurrentAssets].reduce((sum, e) => sum + e.amount, 0)}
+                  amount={[...currentAssets, ...nonCurrentAssets].reduce((sum, e) => sum + (e.amount || 0), 0)}
                   isTotal
                 />
               </CardContent>
@@ -117,51 +150,63 @@ export function FinancialStatements() {
                 <CardTitle>Liabilities & Equity</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div className="font-semibold text-base mb-3">Current Liabilities</div>
-                {currentLiabilities.map(entry => (
-                  <StatementRow 
-                    key={entry.id}
-                    label={entry.description}
-                    amount={entry.amount}
-                  />
-                ))}
-                <StatementRow 
-                  label="Total Current Liabilities"
-                  amount={currentLiabilities.reduce((sum, e) => sum + e.amount, 0)}
-                  isSubtotal
-                />
+                {currentLiabilities.length > 0 && (
+                  <>
+                    <div className="font-semibold text-base mb-3">Current Liabilities</div>
+                    {currentLiabilities.map(entry => (
+                      <StatementRow 
+                        key={entry.id}
+                        label={entry.description || 'N/A'}
+                        amount={entry.amount || 0}
+                      />
+                    ))}
+                    <StatementRow 
+                      label="Total Current Liabilities"
+                      amount={currentLiabilities.reduce((sum, e) => sum + (e.amount || 0), 0)}
+                      isSubtotal
+                    />
+                  </>
+                )}
                 
-                <div className="font-semibold text-base mb-3 mt-6">Non-Current Liabilities</div>
-                {nonCurrentLiabilities.map(entry => (
-                  <StatementRow 
-                    key={entry.id}
-                    label={entry.description}
-                    amount={entry.amount}
-                  />
-                ))}
-                <StatementRow 
-                  label="Total Non-Current Liabilities"
-                  amount={nonCurrentLiabilities.reduce((sum, e) => sum + e.amount, 0)}  
-                  isSubtotal
-                />
+                {nonCurrentLiabilities.length > 0 && (
+                  <>
+                    <div className="font-semibold text-base mb-3 mt-6">Non-Current Liabilities</div>
+                    {nonCurrentLiabilities.map(entry => (
+                      <StatementRow 
+                        key={entry.id}
+                        label={entry.description || 'N/A'}
+                        amount={entry.amount || 0}
+                      />
+                    ))}
+                    <StatementRow 
+                      label="Total Non-Current Liabilities"
+                      amount={nonCurrentLiabilities.reduce((sum, e) => sum + (e.amount || 0), 0)}  
+                      isSubtotal
+                    />
+                  </>
+                )}
                 
-                <div className="font-semibold text-base mb-3 mt-6">Equity</div>
-                {equity.map(entry => (
-                  <StatementRow 
-                    key={entry.id}
-                    label={entry.description}
-                    amount={entry.amount}
-                  />
-                ))}
-                <StatementRow 
-                  label="Total Equity"
-                  amount={equity.reduce((sum, e) => sum + e.amount, 0)}
-                  isSubtotal
-                />
+                {equity.length > 0 && (
+                  <>
+                    <div className="font-semibold text-base mb-3 mt-6">Equity</div>
+                    {equity.map(entry => (
+                      <StatementRow 
+                        key={entry.id}
+                        label={entry.description || 'N/A'}
+                        amount={entry.amount || 0}
+                      />
+                    ))}
+                    <StatementRow 
+                      label="Total Equity"
+                      amount={equity.reduce((sum, e) => sum + (e.amount || 0), 0)}
+                      isSubtotal
+                    />
+                  </>
+                )}
                 
                 <StatementRow 
                   label="TOTAL LIABILITIES & EQUITY"
-                  amount={[...currentLiabilities, ...nonCurrentLiabilities, ...equity].reduce((sum, e) => sum + e.amount, 0)}
+                  amount={[...currentLiabilities, ...nonCurrentLiabilities, ...equity].reduce((sum, e) => sum + (e.amount || 0), 0)}
                   isTotal
                 />
               </CardContent>
@@ -175,33 +220,41 @@ export function FinancialStatements() {
               <CardTitle>Income Statement</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="font-semibold text-base mb-3">Revenue</div>
-              {revenue.map(entry => (
-                <StatementRow 
-                  key={entry.id}
-                  label={entry.description}
-                  amount={entry.amount}
-                />
-              ))}
-              <StatementRow 
-                label="Total Revenue"
-                amount={totalRevenue}
-                isSubtotal
-              />
+              {revenue.length > 0 && (
+                <>
+                  <div className="font-semibold text-base mb-3">Revenue</div>
+                  {revenue.map(entry => (
+                    <StatementRow 
+                      key={entry.id}
+                      label={entry.description || 'N/A'}
+                      amount={entry.amount || 0}
+                    />
+                  ))}
+                  <StatementRow 
+                    label="Total Revenue"
+                    amount={totalRevenue}
+                    isSubtotal
+                  />
+                </>
+              )}
               
-              <div className="font-semibold text-base mb-3 mt-6">Expenses</div>
-              {expenses.map(entry => (
-                <StatementRow 
-                  key={entry.id}
-                  label={entry.description}
-                  amount={entry.amount}
-                />
-              ))}
-              <StatementRow 
-                label="Total Expenses"
-                amount={totalExpenses}
-                isSubtotal
-              />
+              {expenses.length > 0 && (
+                <>
+                  <div className="font-semibold text-base mb-3 mt-6">Expenses</div>
+                  {expenses.map(entry => (
+                    <StatementRow 
+                      key={entry.id}
+                      label={entry.description || 'N/A'}
+                      amount={entry.amount || 0}
+                    />
+                  ))}
+                  <StatementRow 
+                    label="Total Expenses"
+                    amount={totalExpenses}
+                    isSubtotal
+                  />
+                </>
+              )}
               
               <StatementRow 
                 label="NET INCOME"
@@ -220,7 +273,7 @@ export function FinancialStatements() {
             <CardContent>
               <div className="text-center py-12 text-muted-foreground">
                 <p>Cash Flow Statement will be generated from detailed transaction data.</p>
-                <p className="text-sm mt-2">Upload a PDF with cash flow information to populate this section.</p>
+                <p className="text-sm mt-2">Process Excel files with cash flow information to populate this section.</p>
               </div>
             </CardContent>
           </Card>

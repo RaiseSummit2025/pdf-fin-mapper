@@ -1,11 +1,36 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FileSelector } from '@/components/FileSelector';
-import { TrendingUp, TrendingDown, DollarSign, PieChart } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, PieChart, AlertCircle } from 'lucide-react';
 
 export function Dashboard() {
   const { currentFinancialData } = useFinancialData();
   const { entries, companyName, reportPeriod } = currentFinancialData;
+
+  // Show message if no data is available
+  if (!entries || entries.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground">Financial overview and key metrics</p>
+        </div>
+        
+        <FileSelector />
+        
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No Financial Data Available</h3>
+            <p className="text-muted-foreground text-center">
+              Please upload and process an Excel file using the Excel Processor to view financial data and metrics.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Calculate key metrics
   const totalAssets = entries
@@ -29,7 +54,7 @@ export function Dashboard() {
     .reduce((sum, e) => sum + e.amount, 0);
     
   const netIncome = totalRevenue - totalExpenses;
-  const debtToEquity = totalLiabilities / totalEquity;
+  const debtToEquity = totalEquity !== 0 ? totalLiabilities / totalEquity : 0;
 
   const formatCurrency = (amount: number) => 
     new Intl.NumberFormat('en-US', { 
@@ -40,11 +65,16 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-muted-foreground">Financial overview and key metrics</p>
+      </div>
+
       <FileSelector />
       
       <div>
-        <h1 className="text-3xl font-bold text-foreground">{companyName}</h1>
-        <p className="text-muted-foreground">{reportPeriod}</p>
+        <h2 className="text-2xl font-bold text-foreground">{companyName || 'Company Financial Data'}</h2>
+        <p className="text-muted-foreground">{reportPeriod || 'Current Period'}</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -62,13 +92,13 @@ export function Dashboard() {
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Net Income</CardTitle>
             {netIncome >= 0 ? (
-              <TrendingUp className="h-4 w-4 text-success" />
+              <TrendingUp className="h-4 w-4 text-green-600" />
             ) : (
-              <TrendingDown className="h-4 w-4 text-destructive" />
+              <TrendingDown className="h-4 w-4 text-red-600" />
             )}
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
+            <div className={`text-2xl font-bold ${netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatCurrency(netIncome)}
             </div>
           </CardContent>
@@ -130,10 +160,10 @@ export function Dashboard() {
               <span>{formatCurrency(totalExpenses)}</span>
             </div>
             <div className="flex justify-between border-t pt-4">
-              <span className={`font-medium ${netIncome >= 0 ? 'text-success' : 'text-destructive'}`}>
+              <span className={`font-medium ${netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 Net Income
               </span>
-              <span className={netIncome >= 0 ? 'text-success' : 'text-destructive'}>
+              <span className={netIncome >= 0 ? 'text-green-600' : 'text-red-600'}>
                 {formatCurrency(netIncome)}
               </span>
             </div>
