@@ -1,9 +1,11 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { ModelSelector } from './ModelSelector';
 import { useChatApi } from '@/hooks/useChatApi';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useToast } from '@/hooks/use-toast';
 
 export interface Message {
   id: string;
@@ -24,6 +26,7 @@ export const ChatInterface = ({ apiKeys }: ChatInterfaceProps) => {
   const [selectedModel, setSelectedModel] = useState<string>('llama3-70b-8192');
   const { sendMessage, isLoading } = useChatApi();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -44,6 +47,7 @@ export const ChatInterface = ({ apiKeys }: ChatInterfaceProps) => {
     setMessages(prev => [...prev, userMessage]);
 
     try {
+      console.log('Sending message with model:', selectedModel);
       const response = await sendMessage({
         model: selectedModel,
         prompt: content,
@@ -53,6 +57,8 @@ export const ChatInterface = ({ apiKeys }: ChatInterfaceProps) => {
         stream: false,
       }, apiKeys);
 
+      console.log('Received response:', response);
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -61,15 +67,27 @@ export const ChatInterface = ({ apiKeys }: ChatInterfaceProps) => {
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
+      toast({
+        title: "Message sent successfully",
+        description: `Used ${response.tokens_used} tokens`,
+      });
+
     } catch (error) {
       console.error('Chat error:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Sorry, I encountered an error processing your message. Please check your API keys and try again.',
+        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
+
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please check your connection and try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -88,7 +106,7 @@ export const ChatInterface = ({ apiKeys }: ChatInterfaceProps) => {
           {messages.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <p>Start a conversation with the AI!</p>
-              <p className="text-sm mt-2">Ask questions, request help, or just chat.</p>
+              <p className="text-sm mt-2">Ask questions about financial data, get help with analysis, or just chat.</p>
             </div>
           ) : (
             messages.map((message) => (

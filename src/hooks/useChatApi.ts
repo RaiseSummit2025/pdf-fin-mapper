@@ -33,6 +33,8 @@ export const useChatApi = () => {
   };
 
   const sendToGroq = async (request: ChatRequest): Promise<ChatResponse> => {
+    console.log('Invoking chat-with-groq function with:', { model: request.model, prompt: request.prompt.substring(0, 100) + '...' });
+    
     const { data, error } = await supabase.functions.invoke('chat-with-groq', {
       body: {
         model: request.model,
@@ -49,10 +51,11 @@ export const useChatApi = () => {
     }
 
     if (data?.error) {
-      console.error('Groq API error:', data.error);
+      console.error('Groq API error from function:', data.error);
       throw new Error(`Groq API error: ${data.error}`);
     }
 
+    console.log('Groq function response:', data);
     return data;
   };
 
@@ -102,7 +105,7 @@ export const useChatApi = () => {
         }
         return await sendToOpenAI(request, apiKeys.openai);
       } else {
-        // For Groq models, we now use the Edge Function
+        // For Groq models, we use the Edge Function which handles the API key
         return await sendToGroq(request);
       }
     } catch (error) {
