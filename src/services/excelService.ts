@@ -1,4 +1,3 @@
-
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExcelUploadResult {
@@ -105,44 +104,20 @@ class ExcelService {
       console.log('Processing Excel file with upload_id:', upload.id);
       
       try {
-        // Get the session token for authorization
-        const { data: { session } } = await supabase.auth.getSession();
-        const authToken = session?.access_token;
-
-        const functionUrl = 'https://eljikaqbumdqkrssudrm.supabase.co/functions/v1/process-excel';
-        
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-
-        // Add authorization header if we have a session
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`;
-        } else {
-          // Fallback to using the anon key from the client config
-          headers['Authorization'] = `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsamlrYXFidW1kcWtyc3N1ZHJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE2NjgzODMsImV4cCI6MjA2NzI0NDM4M30.NRze5UW2Sdi3ZLmoVaSEFRm2QG14LsDBRoQRwDj49aw`;
-        }
-        
-        const response = await fetch(functionUrl, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ upload_id: upload.id })
+        const { data, error } = await supabase.functions.invoke('process-excel', {
+          body: { upload_id: upload.id }
         });
 
-        console.log('Function response status:', response.status);
+        console.log('Function response:', data);
         
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Function request failed:', response.status, errorText);
-          throw new Error(`Processing failed: ${response.status} - ${errorText}`);
+        if (error) {
+          console.error('Function invocation error:', error);
+          throw new Error(`Processing failed: ${error.message}`);
         }
 
-        const processResult = await response.json();
-        console.log('Excel processing result:', processResult);
-
         // Check if the processing was successful
-        if (!processResult || !processResult.success) {
-          const errorMsg = processResult?.error || 'Processing failed - no response from server';
+        if (!data || !data.success) {
+          const errorMsg = data?.error || 'Processing failed - no response from server';
           console.error('Processing failed:', errorMsg);
           await this.updateUploadStatus(upload.id, 'failed', errorMsg);
           throw new Error(errorMsg);
@@ -151,8 +126,8 @@ class ExcelService {
         console.log('Excel processing completed successfully');
         return {
           success: true,
-          records_count: processResult.total_records_count || 0,
-          sheets_count: processResult.sheets_count || 0,
+          records_count: data.total_records_count || 0,
+          sheets_count: data.sheets_count || 0,
           upload_id: upload.id
         };
 
