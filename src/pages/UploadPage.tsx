@@ -1,10 +1,52 @@
 
+import { useState, useEffect } from 'react';
 import { PdfUpload } from '@/components/PdfUpload';
 import { ExcelProcessor } from '@/components/ExcelProcessor';
+import { ExcelUpload } from '@/components/ExcelUpload';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Zap } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+
+interface ExcelUpload {
+  id: string;
+  filename: string;
+  file_size: number;
+  processing_status: string;
+  created_at: string;
+  completed_at?: string;
+  error_message?: string;
+  total_records_count?: number;
+  sheets_count?: number;
+}
 
 const UploadPage = () => {
+  const [excelUploads, setExcelUploads] = useState<ExcelUpload[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchExcelUploads = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('excel_uploads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching Excel uploads:', error);
+        return;
+      }
+
+      setExcelUploads(data || []);
+    } catch (error) {
+      console.error('Error fetching Excel uploads:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchExcelUploads();
+  }, []);
+
   return (
     <div className="container mx-auto p-6 max-w-4xl">
       <div className="mb-6">
@@ -29,7 +71,10 @@ const UploadPage = () => {
         </TabsContent>
         
         <TabsContent value="processor" className="mt-6">
-          <ExcelProcessor />
+          <div className="space-y-6">
+            <ExcelUpload />
+            <ExcelProcessor uploads={excelUploads} onRefresh={fetchExcelUploads} />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
