@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, ArrowRight, GripVertical } from 'lucide-react';
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, ArrowRight, GripVertical, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useFinancialData } from '@/contexts/FinancialDataContext';
 import { FinancialEntry, FinancialData } from '@/types/financial';
 import { FileSelector } from '@/components/FileSelector';
+import { extractStructuredPDFData, convertToLovableFormat, RawFinancialEntry } from '@/services/pdfExtractionService';
 import {
   DndContext,
   closestCenter,
@@ -256,6 +257,8 @@ export function PdfUpload() {
   const [progress, setProgress] = useState(0);
   const [showMappingEngine, setShowMappingEngine] = useState(false);
   const [mappedData, setMappedData] = useState<FinancialData | null>(null);
+  const [extractionResult, setExtractionResult] = useState<any>(null);
+  const [debugMode, setDebugMode] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const { toast } = useToast();
   const { addFile, currentFinancialData, updateFileData, selectedFileId } = useFinancialData();
@@ -307,6 +310,7 @@ export function PdfUpload() {
       setUploadedFile(file);
       setShowMappingEngine(false);
       setMappedData(null);
+      setExtractionResult(null);
       setSteps(processingSteps.map(step => ({ ...step, status: 'pending' })));
       setProgress(0);
     } else {
@@ -318,55 +322,108 @@ export function PdfUpload() {
     }
   };
 
-  const simulateProcessing = async () => {
+  const processStructuredPDF = async () => {
+    if (!uploadedFile) return;
+    
     setIsProcessing(true);
     
-    for (let i = 0; i < steps.length; i++) {
+    try {
+      // Step 1: File Upload
       setSteps(prev => prev.map((step, index) => 
-        index === i ? { ...step, status: 'processing' } : step
+        index === 0 ? { ...step, status: 'processing' } : step
+      ));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setSteps(prev => prev.map((step, index) => 
+        index === 0 ? { ...step, status: 'completed' } : step
+      ));
+      setProgress(25);
+
+      // Step 2: IFRS Mapping (Enhanced PDF Extraction)
+      setSteps(prev => prev.map((step, index) => 
+        index === 1 ? { ...step, status: 'processing' } : step
       ));
       
-      await new Promise(resolve => setTimeout(resolve, 800));
+      console.log('Starting enhanced PDF extraction...');
+      const result = await extractStructuredPDFData(uploadedFile, debugMode);
+      setExtractionResult(result);
       
-      if (i === 1) { // IFRS Mapping step
-        const fileToParse = uploadedFile;
-        const parsedData = fileToParse ? await parseActualPDFData(fileToParse) : null;
+      if (result.success && result.entries.length > 0) {
+        const lovableData = convertToLovableFormat(result.entries, uploadedFile.name);
+        setMappedData(lovableData);
         
-        if (parsedData) {
-          console.log('Successfully parsed PDF data:', parsedData);
-          setMappedData(parsedData);
-          
-          // Create new file entry
-          const newFileData = {
-            id: `file-${Date.now()}`,
-            filename: uploadedFile?.name || 'Unknown File',
-            uploadDate: new Date().toISOString(),
-            data: parsedData
-          };
-          
-          addFile(newFileData);
-        } else {
-          // Fallback to current financial data
-          console.log('Using current financial data');
-          setMappedData(currentFinancialData);
-        }
+        // Create new file entry
+        const newFileData = {
+          id: `file-${Date.now()}`,
+          filename: uploadedFile.name,
+          uploadDate: new Date().toISOString(),
+          data: lovableData
+        };
+        
+        addFile(newFileData);
+        
+        toast({
+          title: "Extraction Successful",
+          description: `Extracted ${result.entries.length} financial entries`,
+          variant: "default"
+        });
+      } else {
+        throw new Error(result.errors.join(', ') || 'No data extracted');
       }
       
       setSteps(prev => prev.map((step, index) => 
-        index === i ? { ...step, status: 'completed' } : step
+        index === 1 ? { ...step, status: 'completed' } : step
+      ));
+      setProgress(50);
+
+      // Step 3: Data Validation
+      setSteps(prev => prev.map((step, index) => 
+        index === 2 ? { ...step, status: 'processing' } : step
+      ));
+      await new Promise(resolve => setTimeout(resolve, 800));
+      setSteps(prev => prev.map((step, index) => 
+        index === 2 ? { ...step, status: 'completed' } : step
+      ));
+      setProgress(75);
+
+      // Step 4: Completion
+      setSteps(prev => prev.map((step, index) => 
+        index === 3 ? { ...step, status: 'processing' } : step
+      ));
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setSteps(prev => prev.map((step, index) => 
+        index === 3 ? { ...step, status: 'completed' } : step
+      ));
+      setProgress(100);
+      
+      setShowMappingEngine(true);
+      
+    } catch (error) {
+      console.error('Processing failed:', error);
+      setSteps(prev => prev.map(step => 
+        step.status === 'processing' ? { ...step, status: 'error' } : step
       ));
       
-      setProgress(((i + 1) / steps.length) * 100);
+      toast({
+        title: "Processing Failed",
+        description: error instanceof Error ? error.message : 'Unknown error occurred',
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
     }
+  };
+
+  const downloadRawData = () => {
+    if (!extractionResult || !extractionResult.entries) return;
     
-    setShowMappingEngine(true);
-    setIsProcessing(false);
-    
-    toast({
-      title: "Processing Complete",
-      description: `Successfully processed ${mappedData?.entries.length || 0} entries`,
-      variant: "default"
-    });
+    const jsonData = JSON.stringify(extractionResult.entries, null, 2);
+    const blob = new Blob([jsonData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'parsed_data.json';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -515,9 +572,6 @@ export function PdfUpload() {
   const MappingEngine = () => {
     const dataToUse = mappedData;
     
-    console.log('MappingEngine - mappedData:', mappedData);
-    console.log('MappingEngine - dataToUse:', dataToUse);
-    
     if (!dataToUse || !dataToUse.entries.length) {
       return (
         <div className="space-y-6">
@@ -526,7 +580,56 @@ export function PdfUpload() {
               <h2 className="text-2xl font-bold text-gray-900">IFRS Mapping Engine</h2>
               <p className="text-gray-600">No structured data found in the uploaded PDF</p>
             </div>
+            {extractionResult && (
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setDebugMode(!debugMode)}>
+                  {debugMode ? 'Hide' : 'Show'} Debug Info
+                </Button>
+                {extractionResult.entries && (
+                  <Button variant="outline" onClick={downloadRawData} className="gap-2">
+                    <Download className="h-4 w-4" />
+                    Download JSON
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
+          
+          {debugMode && extractionResult && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Extraction Debug Info</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p><strong>Success:</strong> {extractionResult.success ? 'Yes' : 'No'}</p>
+                    <p><strong>Entries Found:</strong> {extractionResult.entries?.length || 0}</p>
+                    <p><strong>Errors:</strong> {extractionResult.errors?.length || 0}</p>
+                  </div>
+                  <div>
+                    {extractionResult.debug_info && (
+                      <>
+                        <p><strong>Pages:</strong> {extractionResult.debug_info.totalPages}</p>
+                        <p><strong>Rows Extracted:</strong> {extractionResult.debug_info.extractedRows}</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                {extractionResult.errors && extractionResult.errors.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-red-600 mb-2">Errors:</h4>
+                    <ul className="list-disc pl-5 text-sm text-red-600">
+                      {extractionResult.errors.map((error: string, idx: number) => (
+                        <li key={idx}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
           
           <div className="text-center text-gray-500 py-12 border border-gray-200 rounded-lg">
             <p className="text-lg mb-2">No Financial Data Available</p>
@@ -603,9 +706,17 @@ export function PdfUpload() {
               <h2 className="text-2xl font-bold text-gray-900">IFRS Mapping Engine</h2>
               <p className="text-gray-600">Drag amounts to reassign IFRS categories</p>
             </div>
-            <Badge className="bg-blue-100 text-blue-800">
-              {dataToUse.entries.length} items
-            </Badge>
+            <div className="flex items-center gap-4">
+              <Badge className="bg-blue-100 text-blue-800">
+                {dataToUse.entries.length} items
+              </Badge>
+              {extractionResult && extractionResult.entries && (
+                <Button variant="outline" onClick={downloadRawData} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Raw JSON
+                </Button>
+              )}
+            </div>
           </div>
 
           <Tabs defaultValue="balance-sheet" className="w-full">
@@ -795,7 +906,7 @@ export function PdfUpload() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>File Upload</CardTitle>
+              <CardTitle>Enhanced PDF Upload</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div
@@ -807,7 +918,10 @@ export function PdfUpload() {
                   {uploadedFile ? 'File Selected' : 'Click to upload PDF'}
                 </p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Upload financial statements or trial balance (PDF only)
+                  Upload trial balance or financial statements (PDF only)
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Enhanced extraction supports structured table data with account numbers, debits, credits
                 </p>
                 {uploadedFile && (
                   <div className="flex items-center justify-center gap-2 text-sm">
@@ -829,9 +943,23 @@ export function PdfUpload() {
               />
 
               {uploadedFile && !isProcessing && progress === 0 && (
-                <Button onClick={simulateProcessing} className="w-full" size="lg">
-                  Process PDF
-                </Button>
+                <div className="space-y-2">
+                  <Button onClick={processStructuredPDF} className="w-full" size="lg">
+                    Process PDF with Enhanced Extraction
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="debug-mode"
+                      checked={debugMode}
+                      onChange={(e) => setDebugMode(e.target.checked)}
+                      className="rounded"
+                    />
+                    <label htmlFor="debug-mode" className="text-sm text-muted-foreground">
+                      Enable debug mode (show extraction details)
+                    </label>
+                  </div>
+                </div>
               )}
 
               {isProcessing && (
